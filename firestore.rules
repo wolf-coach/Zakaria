@@ -8,7 +8,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return signedIn() &&
-        request.auth.token.email == "admin@coachflow.demo";
+        request.auth.token.email == "omar@gmail.com";
     }
 
     match /users/{userId} {

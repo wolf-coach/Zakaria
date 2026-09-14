@@ -1,24 +1,75 @@
-# CoachFlow — Coaching Platform
+# CoachFlow Coaching Platform — Firebase Customer Manager
 
-A modern React + Vite coaching website with Framer Motion and Firebase-ready authentication/database integration.
+## What this version does
 
-## Features
+The Admin dashboard is connected to Firestore and treats Firebase as the source of truth for customer profiles.
 
-- Public coach landing page
-- About, services, coaching packs and reviews
-- Customer sign up / login
-- Customer dashboard
-- Profile information: name, age, height, weight, goals, allergies and health notes
-- Monday–Sunday weekly program
-- Meal plan
-- Package validity
-- Admin dashboard
-- Add/edit customers
-- Add/edit weekly programs and meals
-- Firebase Authentication + Firestore integration
-- Local demo mode when Firebase is not configured
-- Responsive mobile/desktop design
-- Framer Motion animations
+### Customer workflow
+1. A customer creates an account from **Sign Up** (Email/Password or Google).
+2. Firebase Authentication creates the account and the app creates `/users/{uid}`.
+3. The customer is immediately sent to their Dashboard.
+4. The coach opens **Admin → Customers** and sees all customer profiles from the Firestore `users` collection (the coach/admin account is filtered out).
+5. The coach selects one customer.
+6. The coach edits only that customer's profile and saves it to `/users/{customerUid}`.
+7. The coach opens **Weekly program** and edits Monday–Sunday for the selected customer.
+8. The program is stored at `/programs/{customerUid}`.
+9. The customer's Dashboard reads `/programs/{theirUid}`, so each customer sees only their own program.
+
+## Firestore structure
+
+```text
+users
+  ├── CUSTOMER_UID_1
+  │   ├── name
+  │   ├── email
+  │   ├── age
+  │   ├── height
+  │   ├── weight
+  │   ├── goal
+  │   ├── allergies
+  │   ├── health
+  │   ├── package
+  │   ├── startDate
+  │   └── endDate
+  └── CUSTOMER_UID_2
+
+programs
+  ├── CUSTOMER_UID_1
+  │   ├── Monday
+  │   ├── Tuesday
+  │   ├── ...
+  │   └── Sunday
+  └── CUSTOMER_UID_2
+      ├── Monday
+      ├── Tuesday
+      ├── ...
+      └── Sunday
+```
+
+## Firebase setup
+
+1. Firebase Console → Authentication → Sign-in method → enable **Email/Password**.
+2. Optionally enable **Google**.
+3. Firebase Console → Firestore Database → create the database.
+4. Create your coach account in Authentication → Users.
+5. Set `.env` with your Firebase web configuration and the exact coach email:
+
+```env
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+VITE_ADMIN_EMAIL=your-coach-email@example.com
+```
+
+6. In `firestore.rules`, replace the admin email with the same coach email and publish the rules in Firebase.
+7. Restart Vite after changing `.env`.
+
+## Important
+
+The Admin page cannot securely create a Firebase Authentication user from a browser-only React app. The safe workflow is: **customer signs up first → customer appears automatically in Admin → coach assigns the customer's program**. A later production upgrade can add a Cloud Function/Admin SDK invitation system if you want the coach to create customer accounts from Admin.
 
 ## Run
 
@@ -26,33 +77,3 @@ A modern React + Vite coaching website with Framer Motion and Firebase-ready aut
 npm install
 npm run dev
 ```
-
-Then open the URL shown by Vite.
-
-## Firebase setup
-
-1. Create a Firebase project.
-2. Enable Authentication → Email/Password.
-3. Create a Firestore database.
-4. Copy `.env.example` to `.env`.
-5. Add your Firebase web-app configuration.
-6. Replace the demo admin email in `src/lib/firebase.js`.
-7. Add the Firestore security rules from `firestore.rules`.
-
-The app intentionally stays usable in demo mode if Firebase is not configured.
-
-## Demo mode
-
-Without Firebase configuration, the app uses browser localStorage so you can test the UI and workflows immediately.
-
-Demo admin:
-- Email: `admin@coachflow.demo`
-- Password: `admin123`
-
-Demo customer:
-- Email: `alex@example.com`
-- Password: `demo123`
-
-## Important
-
-The health/allergy fields are sensitive personal information. Before using this in production, configure Firebase security rules, authentication, backups and an appropriate privacy policy/consent process.
