@@ -363,8 +363,8 @@ function Nav({ page, go, isCustomer, isAdmin, logout }) {
 }
 function Home({ go }) {
   const packs = [
-    { name: "1 To 1", price: "500MAD", desc: "Anytime - Anywhere.", items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics"] },
-    { name: "Transformation", price: "999MAD", desc: "Your complete transformation.", popular: true, items: ["Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking"] },
+    { name: "Basic", price: "1000MAD", desc: "1 To 1 At Gym Metroflex.", items: i["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
+    { name: "Transformation", price: "999MAD", desc: "1 To 1 In Your Home Or My Gym", popular: true, items: ["Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking"] },
     { name: "Elite", price: "1159MAD", desc: "Maximum accountability.", items: ["Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] }
   ];
   const reviews = [
