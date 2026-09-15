@@ -7,20 +7,14 @@ import {
 } from "lucide-react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword } from "./lib/firebase";
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  setDoc,
-} from "firebase/firestore";
+import { ref, get, set, update, onValue } from "firebase/database";
 import { demoCustomer, demoCustomers, demoProgram } from "./data/demo";
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "admin@coachflow.demo";
 const days = Object.keys(demoProgram);
 const emptyProgram = Object.fromEntries(days.map(day => [day, { workout: "", exercises: [], meals: [] }]));
 
-// Firestore data can contain arrays or objects, depending on how
+// Firebase Realtime Database can return arrays as arrays or, depending on how
 // the data was edited, as objects. Normalize every day before rendering so a
 // single malformed/missing day (including Sunday) can never crash the dashboard.
 function normalizeList(value) {
@@ -69,7 +63,7 @@ function App() {
 
   const notify = (msg) => {
     setToast(msg);
-    setTimeout(() => setToast(""), 2600);
+    setTimeout(() => setToast(""), 3000);
   };
 
   const go = (p) => {
@@ -82,11 +76,11 @@ function App() {
   useEffect(() => {
     if (!firebaseConfigured || !db || !user || user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return;
 
-    const profileRef = doc(db, "users", user.uid);
-    const programRef = doc(db, "programs", user.uid);
+    const profileRef = ref(db, `users/${user.uid}`);
+    const programRef = ref(db, `programs/${user.uid}`);
 
-    const unsubscribeProfile = onSnapshot(profileRef, (snap) => {
-      const data = snap.exists() ? snap.data() : null;
+    const unsubscribeProfile = onValue(profileRef, (snap) => {
+      const data = snap.val();
       if (data) {
         setCustomer({
           ...emptyCustomer,
@@ -98,12 +92,12 @@ function App() {
     }, (e) => {
       console.error("Could not listen to customer profile", e);
       notify(e?.code === "PERMISSION_DENIED"
-        ? "Firebase denied your profile. Check Firestore Rules."
+        ? "denied your profile.."
         : "Could not load your customer profile.");
     });
 
-    const unsubscribeProgram = onSnapshot(programRef, (snap) => {
-      const data = snap.exists() ? snap.data() : null;
+    const unsubscribeProgram = onValue(programRef, (snap) => {
+      const data = snap.val();
       setProgram(normalizeProgram(data));
     }, (e) => {
       console.error("Could not listen to customer program", e);
@@ -147,8 +141,8 @@ function App() {
           setPage((current) => ["login", "home"].includes(current) ? "dashboard" : current);
         }
       } catch (e) {
-        console.error("Could not load Firebase user data", e);
-        notify("Signed in, but your profile could not be loaded. Check Firestore Rules.");
+        console.error("Could not load user data", e);
+        notify("Signed in, but your profile could not be loaded. Check it.");
       }
     });
 
@@ -186,7 +180,7 @@ function App() {
         setAuthReady(true);
 
         // Route immediately after Firebase authentication succeeds.
-        // Firestore loading happens after the screen is already shown.
+        // Realtime Database loading happens after the screen is already shown.
         if (u.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
           setAuthMode(null);
           go("admin");
@@ -195,7 +189,7 @@ function App() {
           return;
         }
 
-        const profileRef = doc(db, "users", u.uid);
+        const profileRef = ref(db, `users/${u.uid}`);
 
         // Route immediately after Authentication succeeds. The dashboard is
         // rendered with THIS Firebase UID, never with the demo Alex profile.
@@ -205,7 +199,7 @@ function App() {
         go("dashboard");
 
         if (mode === "signup") {
-          // Save the complete signup form in one Firestore write. The auth-state
+          // Save the complete signup form in one Realtime Database write. The auth-state
           // listener intentionally does not create missing profiles, preventing
           // a race that previously saved only the email.
           const profile = {
@@ -219,23 +213,23 @@ function App() {
             goal: String(form.goal || "").trim(),
             gender: String(form.gender || "").trim()
           };
-          await setDoc(profileRef, profile);
+          await set(profileRef, profile);
           setCustomer(profile);
         } else {
           // Existing customer: load their own UID document. If it does not
           // exist, create a minimal profile without demo data.
-          const existing = await getDoc(profileRef);
+          const existing = await get(profileRef);
           if (existing.exists()) {
-            setCustomer({ ...emptyCustomer, ...existing.data(), id: u.uid, email: u.email || existing.data().email || email });
+            setCustomer({ ...emptyCustomer, ...existing.val(), id: u.uid, email: u.email || existing.val().email || email });
           } else {
             const profile = { ...emptyCustomer, id: u.uid, email: u.email || email, name: u.displayName || "" };
-            await setDoc(profileRef, profile);
+            await set(profileRef, profile);
             setCustomer(profile);
           }
         }
 
-        const programSnap = await getDoc(doc(db, "programs", u.uid));
-        setProgram(normalizeProgram(programSnap.exists() ? programSnap.data() : emptyProgram));
+        const programSnap = await get(ref(db, `programs/${u.uid}`));
+        setProgram(normalizeProgram(programSnap.exists() ? programSnap.val() : emptyProgram));
 
         notify(mode === "signup" ? "Account created successfully." : "Welcome back.");
         authFlowRef.current = null;
@@ -246,7 +240,7 @@ function App() {
       if (mode === "login" && email === ADMIN_EMAIL.toLowerCase() && form.password === "admin123") {
         setAuthMode(null);
         go("admin");
-        notify("Welcome, Coach.");
+        notify("Welcome, Coach Ziko.");
         return;
       }
 
@@ -264,10 +258,10 @@ function App() {
       console.error(e);
       const msg = e?.code === "auth/invalid-credential" ? "Incorrect email or password."
         : e?.code === "auth/email-already-in-use" ? "This email is already registered. Try signing in."
-        : e?.code === "auth/weak-password" ? "Password must be at least 6 characters."
-        : e?.code === "auth/invalid-email" ? "Please enter a valid email address."
-        : e?.code === "PERMISSION_DENIED" || e?.code === "permission-denied" ? "Firebase blocked this request. Check Firestore Rules."
-        : e?.message || "Authentication failed.";
+          : e?.code === "auth/weak-password" ? "Password must be at least 6 characters."
+            : e?.code === "auth/invalid-email" ? "Please enter a valid email address."
+              : e?.code === "PERMISSION_DENIED" || e?.code === "permission-denied" ? "Blocked this request. Check It."
+                : e?.message || "Authentication failed.";
       notify(msg);
     }
   }
@@ -285,15 +279,15 @@ function App() {
       if (u.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         setAuthMode(null);
         go("admin");
-        notify("Welcome, Coach.");
+        notify("Welcome, Coach Ziko.");
         authFlowRef.current = null;
         return;
       }
 
-      const profileRef = doc(db, "users", u.uid);
-      const existing = await getDoc(profileRef);
+      const profileRef = ref(db, `users/${u.uid}`);
+      const existing = await get(profileRef);
       if (!existing.exists()) {
-        await setDoc(profileRef, { ...emptyCustomer, id: u.uid, email: u.email || "", name: u.displayName || "" });
+        await set(profileRef, { ...emptyCustomer, id: u.uid, email: u.email || "", name: u.displayName || "" });
       }
       setAuthMode(null);
       go("dashboard");
@@ -311,13 +305,22 @@ function App() {
       if (!email?.trim()) throw new Error("Enter your email first.");
       await resetPassword(email.trim().toLowerCase());
       notify("Password reset email sent.");
-    } catch(e) {
+    } catch (e) {
       notify(e?.code === "auth/user-not-found" ? "No account found for this email." : e?.message || "Could not send reset email.");
     }
   }
 
   if (!authReady) {
-    return <div className="app auth-loading"><div className="loading-card"><div className="brand static"><span className="brand-mark">C</span><span>COACH<span className="accent">FLOW</span></span></div><div className="spinner"/><p>Checking your account…</p></div></div>;
+    return <div className="app auth-loading">
+              <div className="loading-card">
+                <div className="brand static">
+                  <span className="brand-mark">C</span>
+                  <span>COACH<span className="accent">RAFALIA</span></span>
+                </div>
+                <div className="spinner" />
+                 <p>Checking your account…</p>
+                 </div>
+              </div>;
   }
 
   return (
@@ -328,56 +331,62 @@ function App() {
         {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} go={go} />}
         {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} />}
         {page === "admin" && isAdmin && <Admin key="admin" customers={customers} setCustomers={setCustomers} program={program} setProgram={setProgram} notify={notify} />}
-        {page === "login" && <Auth key="login" mode="login" onSubmit={(f)=>handleAuth("login", f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={()=>setAuthMode("signup")} />}
+        {page === "login" && <Auth key="login" mode="login" onSubmit={(f) => handleAuth("login", f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthMode("signup")} />}
       </AnimatePresence>
       <AnimatePresence>
-        {authMode && <AuthOverlay mode={authMode} close={()=>setAuthMode(null)} onSubmit={(f)=>handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={()=>setAuthMode(authMode==="login"?"signup":"login")} />}
+        {authMode && <AuthOverlay mode={authMode} close={() => setAuthMode(null)} onSubmit={(f) => handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthMode(authMode === "login" ? "signup" : "login")} />}
       </AnimatePresence>
-      <AnimatePresence>{toast && <Toast message={toast}/>}</AnimatePresence>
+      <AnimatePresence>{toast && <Toast message={toast} />}</AnimatePresence>
       <Footer />
     </div>
   );
 }
 
-function Nav({page,go,isCustomer,isAdmin,logout}) {
-  const [open,setOpen]=useState(false); const close=()=>setOpen(false);
-  const section=(id)=>{close(); if(page!=="home"){go("home");setTimeout(()=>document.getElementById(id)?.scrollIntoView({behavior:"smooth"}),100);}else document.getElementById(id)?.scrollIntoView({behavior:"smooth"});};
+function Nav({ page, go, isCustomer, isAdmin, logout }) {
+  const [open, setOpen] = useState(false); const close = () => setOpen(false);
+  const section = (id) => { close(); if (page !== "home") { go("home"); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 100); } else document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); };
   return <header className="nav"><div className="nav-inner">
-    <button className="brand" onClick={()=>{close();go("home")}}><span className="brand-mark">C</span><span>COACH<span className="accent">FLOW</span></span></button>
-    <button className="mobile-menu" aria-label="Toggle menu" onClick={()=>setOpen(!open)}>{open?<X/>:<Menu/>}</button>
-    <nav className={open?"nav-links open":"nav-links"}>
-      <button onClick={()=>{close();go("home")}}>Home</button><button onClick={()=>section("about")}>About</button><button onClick={()=>section("packs")}>Packs</button><button onClick={()=>section("reviews")}>Reviews</button>
-      {isCustomer&&<button onClick={()=>{close();go("dashboard")}}>Dashboard</button>}{isAdmin&&<button onClick={()=>{close();go("admin")}}>Admin</button>}
-      {isCustomer||isAdmin?<button className="outline-btn" onClick={()=>{close();logout()}}><LogOut size={15}/> Logout</button>:<button className="primary-btn small" onClick={()=>{close();go("login")}}><LogIn size={15}/> Login</button>}
+    <button className="brand" onClick={() => { close(); go("home") }}>
+      <span>COACH<span className="accent">RAFALIA</span>
+      </span>
+    </button>
+    <button className="mobile-menu" aria-label="Toggle menu" onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
+    <nav className={open ? "nav-links open" : "nav-links"}>
+      <button onClick={() => { close(); go("home") }}>Home</button>
+      <button onClick={() => section("about")}>About</button>
+      <button onClick={() => section("packs")}>Packs</button>
+      <button onClick={() => section("reviews")}>Reviews</button>
+      {isCustomer && <button onClick={() => { close(); go("dashboard") }}>Dashboard</button>}{isAdmin && <button onClick={() => { close(); go("admin") }}>Admin</button>}
+      {isCustomer || isAdmin ? <button className="outline-btn" onClick={() => { close(); logout() }}><LogOut size={15} /> Logout</button> : <button className="primary-btn small" onClick={() => { close(); go("login") }}><LogIn size={15} /> Login</button>}
     </nav>
   </div></header>;
 }
-function Home({go}) {
+function Home({ go }) {
   const packs = [
-    {name:"Starter", price:"€49", desc:"Build the foundation.", items:["Personal assessment","Weekly training plan","Nutrition basics"]},
-    {name:"Transformation", price:"€99", desc:"Your complete transformation.", popular:true, items:["Everything in Starter","Personal meal plan","Weekly check-in","Progress tracking"]},
-    {name:"Elite", price:"€159", desc:"Maximum accountability.", items:["Everything in Transformation","Direct coach support","Program adjustments","Priority check-ins"]}
+    { name: "Starter", price: "500MAD", desc: "Build the foundation.", items: ["Personal assessment", "Weekly training plan", "Nutrition basics"] },
+    { name: "Transformation", price: "999MAD", desc: "Your complete transformation.", popular: true, items: ["Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking"] },
+    { name: "Elite", price: "1159MAD", desc: "Maximum accountability.", items: ["Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] }
   ];
   const reviews = [
-    ["Amine R.","Lost 9 kg in 12 weeks. The plan was simple, clear and actually sustainable.","5.0"],
-    ["Sara B.","I finally understand how to train and eat for my goal. Amazing coaching.","5.0"],
-    ["Youssef K.","The weekly dashboard keeps me accountable every single day.","5.0"]
+    ["Omar R.", "Lost 9 kg in 12 weeks. The plan was simple, clear and actually sustainable.", "5.0"],
+    ["Sara B.", "I finally understand how to train and eat for my goal. Amazing coaching.", "5.0"],
+    ["Walid R.", "The weekly dashboard keeps me accountable every single day.", "5.0"]
   ];
-  return <motion.main initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+  return <motion.main initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
     <section className="hero">
-      <div className="hero-glow one"/><div className="hero-glow two"/>
+      <div className="hero-glow one" /><div className="hero-glow two" />
       <div className="container hero-grid">
-        <motion.div initial={{x:-40,opacity:0}} animate={{x:0,opacity:1}} transition={{duration:.7}}>
-          <div className="eyebrow"><span className="pulse"/> PERSONAL COACHING • BUILT FOR RESULTS</div>
-          <h1>Build the body.<br/><span>Build the life.</span></h1>
+        <motion.div initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: .7 }}>
+          <div className="eyebrow"><span className="pulse" /> PERSONAL COACHING • BUILT FOR RESULTS</div>
+          <h1>Build the body.<br /><span>Build the life.</span></h1>
           <p className="hero-copy">Personalized training, nutrition and accountability — designed around your life, your body and your goals.</p>
-          <div className="hero-actions"><button className="primary-btn" onClick={()=>go("login")}>Start your journey <ArrowRight size={18}/></button><a className="video-link" href="#about"><span className="play"><Play size={14} fill="currentColor"/></span> Discover coaching</a></div>
-          <div className="trust"><div className="avatars"><span>A</span><span>S</span><span>Y</span><span>+</span></div><div><strong>500+ clients</strong><small>already transforming</small></div></div>
+          <div className="hero-actions"><button className="primary-btn" onClick={() => go("login")}>Start your journey <ArrowRight size={18} /></button><a className="video-link" href="#about"><span className="play"><Play size={14} fill="currentColor" /></span> Discover coaching</a></div>
+          <div className="trust"><div className="avatars"><span>A</span><span>S</span><span>Y</span><span>+</span></div><div><strong>50+ clients</strong><small>already transforming</small></div></div>
         </motion.div>
-        <motion.div className="hero-card-wrap" initial={{scale:.9,opacity:0}} animate={{scale:1,opacity:1}} transition={{duration:.8,delay:.15}}>
+        <motion.div className="hero-card-wrap" initial={{ scale: .9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: .8, delay: .15 }}>
           <div className="hero-card">
             <div className="hero-card-top"><span>YOUR NEXT LEVEL</span><span className="live-dot">● LIVE</span></div>
-            <div className="hero-photo"><div className="photo-overlay"><div className="metric"><span>Progress</span><b>+84%</b></div><div className="progress"><i style={{width:"84%"}}/></div></div></div>
+            <div className="hero-photo"><div className="photo-overlay"><div className="metric"></div></div></div>
             <div className="mini-stats"><div><b>12</b><span>Weeks</span></div><div><b>4.8</b><span>Rating</span></div><div><b>24/7</b><span>Support</span></div></div>
           </div>
         </motion.div>
@@ -385,66 +394,66 @@ function Home({go}) {
     </section>
 
     <section id="about" className="section about"><div className="container two-col">
-      <Reveal><div className="section-label">01 — ABOUT THE COACH</div><h2>Coaching that fits <span>your life.</span></h2><p>I believe fitness should make your life better — not take it over. My coaching combines smart training, practical nutrition and real accountability to create results you can keep.</p><p>Every client gets a plan built around their current level, schedule, preferences and goal.</p><button className="text-btn">Meet your coach <ArrowRight size={17}/></button></Reveal>
-      <Reveal delay={.15}><div className="about-card"><div className="about-icon"><Target/></div><h3>Personal. Measurable. Sustainable.</h3><div className="about-list"><span><Check/>Individual training</span><span><Check/>Personal nutrition</span><span><Check/>Weekly accountability</span><span><Check/>Progress adjustments</span></div></div></Reveal>
+      <Reveal><div className="section-label">01 — ABOUT THE COACH</div><h2>Coaching that fits <span>your life.</span></h2><p>I believe fitness should make your life better — not take it over. My coaching combines smart training, practical nutrition and real accountability to create results you can keep.</p><p>Every client gets a plan built around their current level, schedule, preferences and goal.</p><button className="text-btn">Meet your coach <ArrowRight size={17} /></button></Reveal>
+      <Reveal delay={.15}><div className="about-card"><div className="about-icon"><Target /></div><h3>Personal. Measurable. Sustainable.</h3><div className="about-list"><span><Check />Individual training</span><span><Check />Personal nutrition</span><span><Check />Weekly accountability</span><span><Check />Progress adjustments</span></div></div></Reveal>
     </div></section>
 
     <section className="section dark-section"><div className="container"><Reveal><div className="section-label">02 — WHAT I DO</div><h2>Everything you need to <span>move forward.</span></h2></Reveal><div className="service-grid">
-      {[["01","TRAINING","Structured workouts built for your goal, experience and available equipment.",Dumbbell],["02","NUTRITION","Simple meal guidance and personalized plans you can actually follow.",Utensils],["03","ACCOUNTABILITY","Regular check-ins, adjustments and direct support when you need it.",HeartPulse]].map(([n,t,d,I],i)=><Reveal delay={i*.1} key={n}><div className="service-card"><span>{n}</span><I/><h3>{t}</h3><p>{d}</p></div></Reveal>)}
+      {[["01", "TRAINING", "Structured workouts built for your goal, experience and available equipment.", Dumbbell], ["02", "NUTRITION", "Simple meal guidance and personalized plans you can actually follow.", Utensils], ["03", "ACCOUNTABILITY", "Regular check-ins, adjustments and direct support when you need it.", HeartPulse]].map(([n, t, d, I], i) => <Reveal delay={i * .1} key={n}><div className="service-card"><span>{n}</span><I /><h3>{t}</h3><p>{d}</p></div></Reveal>)}
     </div></div></section>
 
-    <section id="packs" className="section"><div className="container"><Reveal><div className="section-label">03 — COACHING PACKS</div><h2>Choose your <span>commitment.</span></h2></Reveal><div className="pack-grid">{packs.map((p,i)=><Reveal delay={i*.1} key={p.name}><div className={"pack "+(p.popular?"featured":"")}>{p.popular&&<div className="popular">MOST POPULAR</div>}<h3>{p.name}</h3><p>{p.desc}</p><div className="price">{p.price}<small>/ month</small></div><div className="pack-items">{p.items.map(x=><span key={x}><Check size={16}/>{x}</span>)}</div><button className={p.popular?"primary-btn":"outline-dark"} onClick={()=>go("login")}>Get started <ArrowRight size={16}/></button></div></Reveal>)}</div></div></section>
+    <section id="packs" className="section"><div className="container"><Reveal><div className="section-label">03 — COACHING PACKS</div><h2>Choose your <span>commitment.</span></h2></Reveal><div className="pack-grid">{packs.map((p, i) => <Reveal delay={i * .1} key={p.name}><div className={"pack " + (p.popular ? "featured" : "")}>{p.popular && <div className="popular">MOST POPULAR</div>}<h3>{p.name}</h3><p>{p.desc}</p><div className="price">{p.price}<small>/ month</small></div><div className="pack-items">{p.items.map(x => <span key={x}><Check size={16} />{x}</span>)}</div><button className={p.popular ? "primary-btn" : "outline-dark"} onClick={() => go("login")}>Get started <ArrowRight size={16} /></button></div></Reveal>)}</div></div></section>
 
-    <section id="reviews" className="section reviews"><div className="container"><Reveal><div className="section-label">04 — CLIENT RESULTS</div><h2>Real people. <span>Real change.</span></h2></Reveal><div className="review-grid">{reviews.map(([name,text,score],i)=><Reveal delay={i*.1} key={name}><div className="review"><div className="stars">{[1,2,3,4,5].map(x=><Star key={x} size={16} fill="currentColor"/>)}</div><p>“{text}”</p><div className="reviewer"><div>{name[0]}</div><span><b>{name}</b><small>Verified client</small></span></div></div></Reveal>)}</div></div></section>
-    <section className="cta"><div className="container cta-inner"><Reveal><div><div className="section-label">READY?</div><h2>Your next chapter starts <span>today.</span></h2></div><button className="primary-btn" onClick={()=>go("login")}>Join the coaching <ArrowRight/></button></Reveal></div></section>
+    <section id="reviews" className="section reviews"><div className="container"><Reveal><div className="section-label">04 — CLIENT RESULTS</div><h2>Real people. <span>Real change.</span></h2></Reveal><div className="review-grid">{reviews.map(([name, text, score], i) => <Reveal delay={i * .1} key={name}><div className="review"><div className="stars">{[1, 2, 3, 4, 5].map(x => <Star key={x} size={16} fill="currentColor" />)}</div><p>“{text}”</p><div className="reviewer"><div>{name[0]}</div><span><b>{name}</b><small>Verified client</small></span></div></div></Reveal>)}</div></div></section>
+    <section className="cta"><div className="container cta-inner"><Reveal><div><div className="section-label">READY?</div><h2>Your next chapter starts <span>today.</span></h2></div><button className="primary-btn" onClick={() => go("login")}>Join the coaching <ArrowRight /></button></Reveal></div></section>
   </motion.main>
 }
 
-function Dashboard({customer, program, go}) {
+function Dashboard({ customer, program, go }) {
   const [selected, setSelected] = useState("Monday");
   const d = normalizeDay(program?.[selected]);
-  const remaining = customer.endDate ? Math.max(0, Math.ceil((new Date(customer.endDate)-new Date())/(1000*60*60*24))) : null;
+  const remaining = customer.endDate ? Math.max(0, Math.ceil((new Date(customer.endDate) - new Date()) / (1000 * 60 * 60 * 24))) : null;
   const firstName = customer.name?.trim()?.split(" ")[0] || "there";
-  return <motion.main className="page" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} exit={{opacity:0}}>
+  return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
     <div className="container">
-      <div className="dash-head"><div><div className="section-label">CLIENT DASHBOARD</div><h1>Good morning, <span>{firstName}.</span></h1><p>Stay consistent. Small actions, big results.</p></div><button className="outline-dark" onClick={()=>go("profile")}><User size={17}/> My profile</button></div>
-      <div className="dash-stats"><Stat icon={Target} label="Goal" value={customer.goal || "Not set"}/><Stat icon={Flame} label="Current weight" value={customer.weight ? `${customer.weight} kg` : "Not set"}/><Stat icon={Clock3} label="Plan remaining" value={remaining === null ? "—" : `${remaining} days`}/><Stat icon={ShieldCheck} label="Package" value={customer.package || "Not assigned"}/></div>
+      <div className="dash-head"><div><div className="section-label">CLIENT DASHBOARD</div><h1>Good morning, <span>{firstName}.</span></h1><p>Stay consistent. Small actions, big results.</p></div><button className="outline-dark" onClick={() => go("profile")}><User size={17} /> My profile</button></div>
+      <div className="dash-stats"><Stat icon={Target} label="Goal" value={customer.goal || "Not set"} /><Stat icon={Flame} label="Current weight" value={customer.weight ? `${customer.weight} kg` : "Not set"} /><Stat icon={Clock3} label="Plan remaining" value={remaining === null ? "—" : `${remaining} days`} /><Stat icon={ShieldCheck} label="Package" value={customer.package || "Not assigned"} /></div>
       <div className="dashboard-grid">
-        <section className="panel week-panel"><div className="panel-title"><div><span className="section-label">THIS WEEK</span><h2>Your program</h2></div><CalendarDays/></div><div className="day-tabs">{days.map(day=><button className={selected===day?"active":""} onClick={()=>setSelected(day)} key={day}>{day.slice(0,3)}<small>{day}</small></button>)}</div><AnimatePresence mode="wait"><motion.div key={selected} initial={{opacity:0,x:10}} animate={{opacity:1,x:0}} className="program-content"><div className="program-heading"><div className="day-icon"><Dumbbell/></div><div><small>{selected}</small><h3>{d.workout}</h3></div></div><h4>Workout</h4>{d.exercises.map((x,i)=><div className="exercise" key={x}><span>{String(i+1).padStart(2,"0")}</span><b>{x}</b><Check size={16}/></div>)}<h4>Meals</h4><div className="meal-list">{d.meals.map(x=><div key={x}><Utensils size={16}/><span>{x}</span></div>)}</div></motion.div></AnimatePresence></section>
-        <aside className="panel coach-note"><div className="coach-avatar">C</div><div className="section-label">COACH NOTE</div><h3>Consistency beats perfection.</h3><p>Focus on completing today's plan. If something doesn't feel right, message your coach and we'll adjust it.</p><div className="note-line"><Check/> Personalized for you</div><div className="note-line"><Check/> Weekly adjustments</div></aside>
+        <section className="panel week-panel"><div className="panel-title"><div><span className="section-label">THIS WEEK</span><h2>Your program</h2></div><CalendarDays /></div><div className="day-tabs">{days.map(day => <button className={selected === day ? "active" : ""} onClick={() => setSelected(day)} key={day}>{day.slice(0, 3)}<small>{day}</small></button>)}</div><AnimatePresence mode="wait"><motion.div key={selected} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="program-content"><div className="program-heading"><div className="day-icon"><Dumbbell /></div><div><small>{selected}</small><h3>{d.workout}</h3></div></div><h4>Workout</h4>{d.exercises.map((x, i) => <div className="exercise" key={x}><span>{String(i + 1).padStart(2, "0")}</span><b>{x}</b><Check size={16} /></div>)}<h4>Meals</h4><div className="meal-list">{d.meals.map(x => <div key={x}><Utensils size={16} /><span>{x}</span></div>)}</div></motion.div></AnimatePresence></section>
+        <aside className="panel coach-note"><div className="coach-avatar">C</div><div className="section-label">COACH NOTE</div><h3>Consistency beats perfection.</h3><p>Focus on completing today's plan. If something doesn't feel right, message your coach and we'll adjust it.</p><div className="note-line"><Check /> Personalized for you</div><div className="note-line"><Check /> Weekly adjustments</div></aside>
       </div>
     </div>
   </motion.main>
 }
 
-function Stat({icon:Icon,label,value}) { return <div className="stat-card"><div className="stat-icon"><Icon size={18}/></div><small>{label}</small><b>{value}</b></div> }
+function Stat({ icon: Icon, label, value }) { return <div className="stat-card"><div className="stat-icon"><Icon size={18} /></div><small>{label}</small><b>{value}</b></div> }
 
-function Profile({customer,setCustomer,notify}) {
-  const [form,setForm]=useState(customer);
-  const save=async()=>{
+function Profile({ customer, setCustomer, notify }) {
+  const [form, setForm] = useState(customer);
+  const save = async () => {
     try {
       const uid = auth?.currentUser?.uid;
       const normalized = { ...form, id: uid || form.id, email: auth?.currentUser?.email || form.email || "" };
-      if(firebaseConfigured && uid && db) await setDoc(doc(db, "users", uid), normalized);
+      if (firebaseConfigured && uid && db) await set(ref(db, `users/${uid}`), normalized);
       setCustomer(normalized);
       notify("Profile updated and saved to Firebase.");
-    } catch(e) {
+    } catch (e) {
       console.error(e);
       notify(e?.code === "permission-denied" ? "Firebase blocked this save. Check Firestore Rules." : "Could not save profile.");
     }
   };
-  const fields=[["name","Full name"],["email","Email"],["age","Age"],["gender","Gender"],["height","Height (cm)"],["weight","Weight (kg)"],["goal","Main goal"],["phone","Phone"],["allergies","Allergies"],["health","Health / medical notes"]];
-  return <motion.main className="page" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}><div className="container narrow"><div className="page-heading"><div className="section-label">MY PROFILE</div><h1>Your personal <span>information.</span></h1><p>Keep your information accurate so your coach can personalize your plan.</p></div><div className="profile-card">{fields.map(([key,label])=><label key={key}>{label}<input value={form[key]??""} onChange={e=>setForm({...form,[key]:e.target.value})}/></label>)}<button className="primary-btn" onClick={save}><Save size={17}/> Save changes</button></div></div></motion.main>
+  const fields = [["name", "Full name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height (cm)"], ["weight", "Weight (kg)"], ["goal", "Main goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health / medical notes"]];
+  return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}><div className="container narrow"><div className="page-heading"><div className="section-label">MY PROFILE</div><h1>Your personal <span>information.</span></h1><p>Keep your information accurate so your coach can personalize your plan.</p></div><div className="profile-card">{fields.map(([key, label]) => <label key={key}>{label}<input value={form[key] ?? ""} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>)}<button className="primary-btn" onClick={save}><Save size={17} /> Save changes</button></div></div></motion.main>
 }
 
-function Admin({customers,setCustomers,program,setProgram,notify}) {
-  const [selected,setSelected]=useState(null);
-  const [tab,setTab]=useState("customers");
-  const [adminLoading,setAdminLoading]=useState(firebaseConfigured);
-  const [programLoading,setProgramLoading]=useState(false);
-  const [saving,setSaving]=useState(false);
-  const [programSaving,setProgramSaving]=useState(false);
-  const [search,setSearch]=useState("");
+function Admin({ customers, setCustomers, program, setProgram, notify }) {
+  const [selected, setSelected] = useState(null);
+  const [tab, setTab] = useState("customers");
+  const [adminLoading, setAdminLoading] = useState(firebaseConfigured);
+  const [programLoading, setProgramLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [programSaving, setProgramSaving] = useState(false);
+  const [search, setSearch] = useState("");
 
   // Firebase is the source of truth for the coach dashboard. We listen to the
   // users collection so new customer profiles appear automatically.
@@ -456,12 +465,13 @@ function Admin({customers,setCustomers,program,setProgram,notify}) {
     }
 
     setAdminLoading(true);
-    const usersRef = collection(db, "users");
-    const unsubscribe = onSnapshot(usersRef, (snap) => {
-      const list = snap.docs
-        .map((item) => ({ ...emptyCustomer, ...(item.data() || {}), id: item.id }))
+    const usersRef = ref(db, "users");
+    const unsubscribe = onValue(usersRef, (snap) => {
+      const raw = snap.val() || {};
+      const list = Object.entries(raw)
+        .map(([id, data]) => ({ ...emptyCustomer, ...(data || {}), id }))
         .filter(c => c.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase())
-        .sort((a,b) => (a.name || a.email || "").localeCompare(b.name || b.email || ""));
+        .sort((a, b) => (a.name || a.email || "").localeCompare(b.name || b.email || ""));
 
       setCustomers(list);
       setSelected(current => {
@@ -475,14 +485,14 @@ function Admin({customers,setCustomers,program,setProgram,notify}) {
       setSelected(null);
       setAdminLoading(false);
       notify(e?.code === "PERMISSION_DENIED"
-        ? "Admin access denied: publish the Firestore Rules and use the exact admin email."
-        : "Could not load customers from Firebase. Check the Firestore project and rules.");
+        ? "Admin access denied: publish the corrected Realtime Database Rules and use the exact admin email."
+        : "Could not load customers from Firebase. Check the Realtime Database URL.");
     });
 
     return () => unsubscribe();
   }, []);
 
-  const selectedCustomer=customers.find(x=>x.id===selected)||null;
+  const selectedCustomer = customers.find(x => x.id === selected) || null;
 
   // Every time the coach chooses a customer, load THAT customer's program.
   useEffect(() => {
@@ -492,8 +502,8 @@ function Admin({customers,setCustomers,program,setProgram,notify}) {
     }
 
     setProgramLoading(true);
-    const unsubscribe=onSnapshot(doc(db, "programs", selectedCustomer.id), (snap) => {
-      const data = snap.exists() ? snap.data() : null;
+    const unsubscribe = onValue(ref(db, `programs/${selectedCustomer.id}`), (snap) => {
+      const data = snap.val();
       setProgram(normalizeProgram(data));
       setProgramLoading(false);
     }, (e) => {
@@ -501,45 +511,45 @@ function Admin({customers,setCustomers,program,setProgram,notify}) {
       setProgram(emptyProgram);
       setProgramLoading(false);
       notify(e?.code === "permission-denied"
-        ? "Firebase denied program access. Publish the Firestore Rules."
+        ? "Firebase denied program access. Publish the Realtime Database Rules."
         : "Could not load this customer's program.");
     });
     return () => unsubscribe();
   }, [selectedCustomer?.id]);
 
-  const filteredCustomers=customers.filter(c => {
-    const q=search.trim().toLowerCase();
-    return !q || [c.name,c.email,c.goal,c.package].some(v => String(v||"").toLowerCase().includes(q));
+  const filteredCustomers = customers.filter(c => {
+    const q = search.trim().toLowerCase();
+    return !q || [c.name, c.email, c.goal, c.package].some(v => String(v || "").toLowerCase().includes(q));
   });
 
-  const update=(key,val)=>setCustomers(prev=>prev.map(c=>c.id===selected?{...c,[key]:val}:c));
+  const update = (key, val) => setCustomers(prev => prev.map(c => c.id === selected ? { ...c, [key]: val } : c));
 
-  const saveCustomer=async()=>{
+  const saveCustomer = async () => {
     if (!selectedCustomer) return;
     setSaving(true);
     try {
       if (firebaseConfigured && db) {
-        await setDoc(doc(db, "users", selectedCustomer.id), selectedCustomer);
+        await set(ref(db, `users/${selectedCustomer.id}`), selectedCustomer);
       } else {
-        setCustomers(prev=>prev.map(c=>c.id===selected?selectedCustomer:c));
+        setCustomers(prev => prev.map(c => c.id === selected ? selectedCustomer : c));
       }
       notify("Customer information saved to Firebase.");
-    } catch(e) {
+    } catch (e) {
       console.error(e);
       notify(e?.code === "permission-denied" ? "Firebase blocked this save. Check Firestore Rules." : "Could not save customer.");
     } finally { setSaving(false); }
   };
 
-  const add=()=>{
+  const add = () => {
     notify("Have the customer create their account with Sign Up first. They will then appear here automatically.");
     setTab("customers");
   };
 
-  const updateProgram=(day,key,val)=>{
-    setProgram(prev=>({ ...prev, [day]:{ ...(prev[day]||{}), [key]:val } }));
+  const updateProgram = (day, key, val) => {
+    setProgram(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [key]: val } }));
   };
 
-  const saveProgram=async()=>{
+  const saveProgram = async () => {
     if (!selectedCustomer?.id) {
       notify("Select a customer first.");
       return;
@@ -547,78 +557,78 @@ function Admin({customers,setCustomers,program,setProgram,notify}) {
     setProgramSaving(true);
     try {
       if (firebaseConfigured && db) {
-        await setDoc(doc(db, "programs", selectedCustomer.id), program);
+        await set(ref(db, `programs/${selectedCustomer.id}`), program);
       }
       notify(`Program saved for ${selectedCustomer.name || selectedCustomer.email}.`);
-    } catch(e) {
+    } catch (e) {
       console.error(e);
       notify(e?.code === "permission-denied" ? "Firebase blocked this save. Check Firestore Rules." : "Could not save the program to Firebase.");
     } finally { setProgramSaving(false); }
   };
 
-  return <motion.main className="page" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} exit={{opacity:0}}><div className="container">
-    <div className="admin-head"><div><div className="section-label">COACH CONTROL CENTER</div><h1>Admin <span>dashboard.</span></h1><p>Every customer is loaded from Firebase. Select one client and manage only their personal program.</p></div><button className="primary-btn" onClick={add}><Plus size={17}/> Add customer</button></div>
-    <div className="admin-tabs"><button className={tab==="customers"?"active":""} onClick={()=>setTab("customers")}><Users/> Customers <span className="tab-count">{customers.length}</span></button><button className={tab==="program"?"active":""} onClick={()=>setTab("program")}><Dumbbell/> Weekly program</button></div>
-    {adminLoading ? <div className="panel loading-panel"><div className="spinner"/><h3>Loading customers…</h3><p>Getting all customer profiles from Firebase.</p></div> : tab==="customers" ? <div className="admin-grid">
+  return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><div className="container">
+    <div className="admin-head"><div><div className="section-label">COACH CONTROL CENTER</div><h1>Admin <span>dashboard.</span></h1><p>Every customer is loaded from Firebase. Select one client and manage only their personal program.</p></div><button className="primary-btn" onClick={add}><Plus size={17} /> Add customer</button></div>
+    <div className="admin-tabs"><button className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}><Users /> Customers <span className="tab-count">{customers.length}</span></button><button className={tab === "program" ? "active" : ""} onClick={() => setTab("program")}><Dumbbell /> Weekly program</button></div>
+    {adminLoading ? <div className="panel loading-panel"><div className="spinner" /><h3>Loading customers…</h3><p>Getting all customer profiles from Firebase.</p></div> : tab === "customers" ? <div className="admin-grid">
       <div className="customer-list">
-        <div className="customer-list-top"><input className="customer-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search customers…"/><span>{filteredCustomers.length}</span></div>
-        {filteredCustomers.length===0?<div className="empty-state">No customer accounts found.<br/>Ask the customer to Sign Up first.</div>:filteredCustomers.map(c=><button className={selected===c.id?"selected":""} key={c.id} onClick={()=>setSelected(c.id)}><span className="customer-avatar">{(c.name||c.email||"C")[0]}</span><span><b>{c.name||"Unnamed customer"}</b><small>{c.email}</small></span><ChevronDown size={15}/></button>)}
+        <div className="customer-list-top"><input className="customer-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers…" /><span>{filteredCustomers.length}</span></div>
+        {filteredCustomers.length === 0 ? <div className="empty-state">No customer accounts found.<br />Ask the customer to Sign Up first.</div> : filteredCustomers.map(c => <button className={selected === c.id ? "selected" : ""} key={c.id} onClick={() => setSelected(c.id)}><span className="customer-avatar">{(c.name || c.email || "C")[0]}</span><span><b>{c.name || "Unnamed customer"}</b><small>{c.email}</small></span><ChevronDown size={15} /></button>)}
       </div>
-      {selectedCustomer&&<div className="admin-editor panel"><div className="editor-title"><div><div className="section-label">CLIENT</div><h2>{selectedCustomer.name||"Customer"}</h2><small>{selectedCustomer.email}</small></div><span className="status">{selectedCustomer.endDate && new Date(selectedCustomer.endDate)<new Date()?"EXPIRED":"ACTIVE"}</span></div><div className="editor-grid">{[["name","Name"],["email","Email"],["age","Age"],["gender","Gender"],["height","Height"],["weight","Weight"],["goal","Goal"],["phone","Phone"],["allergies","Allergies"],["health","Health notes"],["package","Package"],["startDate","Start date"],["endDate","Validity end date"]].map(([key,label])=><label key={key}>{label}<input value={selectedCustomer[key]??""} onChange={e=>update(key,e.target.value)}/></label>)}</div><button className="primary-btn" onClick={saveCustomer} disabled={saving}><Save size={17}/> {saving?"Saving…":"Save customer"}</button></div>}
+      {selectedCustomer && <div className="admin-editor panel"><div className="editor-title"><div><div className="section-label">CLIENT</div><h2>{selectedCustomer.name || "Customer"}</h2><small>{selectedCustomer.email}</small></div><span className="status">{selectedCustomer.endDate && new Date(selectedCustomer.endDate) < new Date() ? "EXPIRED" : "ACTIVE"}</span></div><div className="editor-grid">{[["name", "Name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height"], ["weight", "Weight"], ["goal", "Goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health notes"], ["package", "Package"], ["startDate", "Start date"], ["endDate", "Validity end date"]].map(([key, label]) => <label key={key}>{label}<input value={selectedCustomer[key] ?? ""} onChange={e => update(key, e.target.value)} /></label>)}</div><button className="primary-btn" onClick={saveCustomer} disabled={saving}><Save size={17} /> {saving ? "Saving…" : "Save customer"}</button></div>}
     </div> :
-    <div className="panel program-admin">
-      <div className="section-label">PROGRAM BUILDER</div><h2>Monday → Sunday</h2>{selectedCustomer?<p className="program-client">Editing program for <b>{selectedCustomer.name||selectedCustomer.email}</b> · Firebase ID <code>{selectedCustomer.id}</code></p>:<p className="program-client">Select a customer from the Customers tab first.</p>}
-      {programLoading ? <div className="loading-panel compact"><div className="spinner"/><h3>Loading this customer's program…</h3></div> : <div className="admin-day-list">{days.map(day=>{
-        const dayData = program[day] || { workout:"", exercises:[], meals:[] };
-        const exercises = dayData.exercises || [];
-        const meals = dayData.meals || [];
-        const setListItem = (key, index, value) => {
-          const list = [...(program[day]?.[key] || [])];
-          list[index] = value;
-          updateProgram(day, key, list);
-        };
-        const addListItem = (key) => updateProgram(day, key, [...(program[day]?.[key] || []), ""]);
-        const removeListItem = (key, index) => updateProgram(day, key, (program[day]?.[key] || []).filter((_, i) => i !== index));
-        return <div className="day-editor" key={day}>
-          <div className="day-title"><b>{day}</b><span>{dayData.workout || "Rest / no workout"}</span></div>
-          <label>Workout title<input value={dayData.workout||""} onChange={e=>updateProgram(day,"workout",e.target.value)} placeholder="e.g. Upper body strength"/></label>
-          <div className="program-field-group"><div className="field-group-head"><span>Exercise descriptions</span><button type="button" className="mini-add" onClick={()=>addListItem("exercises")}><Plus size={13}/> Add exercise</button></div>
-            {exercises.length===0 && <div className="field-empty">No exercises added yet.</div>}
-            {exercises.map((x,i)=><div className="repeat-row" key={`ex-${i}`}><textarea value={x} onChange={e=>setListItem("exercises",i,e.target.value)} placeholder={`Exercise ${i+1} — description, sets, reps, rest, notes…`} rows="2"/><button type="button" className="remove-item" onClick={()=>removeListItem("exercises",i)} aria-label="Remove exercise"><X size={15}/></button></div>)}
-          </div>
-          <div className="program-field-group"><div className="field-group-head"><span>Meals</span><button type="button" className="mini-add" onClick={()=>addListItem("meals")}><Plus size={13}/> Add meal</button></div>
-            {meals.length===0 && <div className="field-empty">No meals added yet.</div>}
-            {meals.map((x,i)=><div className="repeat-row" key={`meal-${i}`}><input value={x} onChange={e=>setListItem("meals",i,e.target.value)} placeholder={`Meal ${i+1} — e.g. Breakfast: eggs, oats, fruit`}/><button type="button" className="remove-item" onClick={()=>removeListItem("meals",i)} aria-label="Remove meal"><X size={15}/></button></div>)}
-          </div>
-        </div>;
-      })}</div>}
-      <button className="primary-btn" onClick={saveProgram} disabled={programSaving || programLoading || !selectedCustomer}><Save size={17}/> {programSaving?"Saving…":"Save program for this customer"}</button>
-    </div>}
+      <div className="panel program-admin">
+        <div className="section-label">PROGRAM BUILDER</div><h2>Monday → Sunday</h2>{selectedCustomer ? <p className="program-client">Editing program for <b>{selectedCustomer.name || selectedCustomer.email}</b> · Firebase ID <code>{selectedCustomer.id}</code></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
+        {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : <div className="admin-day-list">{days.map(day => {
+          const dayData = program[day] || { workout: "", exercises: [], meals: [] };
+          const exercises = dayData.exercises || [];
+          const meals = dayData.meals || [];
+          const setListItem = (key, index, value) => {
+            const list = [...(program[day]?.[key] || [])];
+            list[index] = value;
+            updateProgram(day, key, list);
+          };
+          const addListItem = (key) => updateProgram(day, key, [...(program[day]?.[key] || []), ""]);
+          const removeListItem = (key, index) => updateProgram(day, key, (program[day]?.[key] || []).filter((_, i) => i !== index));
+          return <div className="day-editor" key={day}>
+            <div className="day-title"><b>{day}</b><span>{dayData.workout || "Rest / no workout"}</span></div>
+            <label>Workout title<input value={dayData.workout || ""} onChange={e => updateProgram(day, "workout", e.target.value)} placeholder="e.g. Upper body strength" /></label>
+            <div className="program-field-group"><div className="field-group-head"><span>Exercise descriptions</span><button type="button" className="mini-add" onClick={() => addListItem("exercises")}><Plus size={13} /> Add exercise</button></div>
+              {exercises.length === 0 && <div className="field-empty">No exercises added yet.</div>}
+              {exercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><textarea value={x} onChange={e => setListItem("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} rows="2" /><button type="button" className="remove-item" onClick={() => removeListItem("exercises", i)} aria-label="Remove exercise"><X size={15} /></button></div>)}
+            </div>
+            <div className="program-field-group"><div className="field-group-head"><span>Meals</span><button type="button" className="mini-add" onClick={() => addListItem("meals")}><Plus size={13} /> Add meal</button></div>
+              {meals.length === 0 && <div className="field-empty">No meals added yet.</div>}
+              {meals.map((x, i) => <div className="repeat-row" key={`meal-${i}`}><input value={x} onChange={e => setListItem("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeListItem("meals", i)} aria-label="Remove meal"><X size={15} /></button></div>)}
+            </div>
+          </div>;
+        })}</div>}
+        <button className="primary-btn" onClick={saveProgram} disabled={programSaving || programLoading || !selectedCustomer}><Save size={17} /> {programSaving ? "Saving…" : "Save program for this customer"}</button>
+      </div>}
   </div></motion.main>
 }
 
-function Auth({mode,onSubmit,onGoogle,onReset,switchMode}) {
- const [form,setForm]=useState({email:"",password:"",name:"",age:"",gender:"",height:"",weight:"",goal:""}); const [show,setShow]=useState(false);
- const set=(k,v)=>setForm({...form,[k]:v});
- return <motion.main className="auth-page" initial={{opacity:0}} animate={{opacity:1}}><div className="auth-box">
-  <div className="brand static"><span className="brand-mark">C</span><span>COACH<span className="accent">FLOW</span></span></div>
-  <div className="section-label">{mode==="login"?"WELCOME BACK":"START YOUR JOURNEY"}</div><h1>{mode==="login"?"Sign in to your":"Create your"} <span>account.</span></h1>
-  <p>{mode==="login"?"Access your personalized coaching dashboard.":"Tell us a little about yourself to get started."}</p>
-  {mode==="signup"&&<><label>Full name<input autoComplete="name" value={form.name} onChange={e=>set("name",e.target.value)} placeholder="Your name"/></label>
-  <div className="form-row"><label>Age<input inputMode="numeric" value={form.age} onChange={e=>set("age",e.target.value)}/></label><label>Height<input inputMode="numeric" value={form.height} onChange={e=>set("height",e.target.value)}/></label><label>Weight<input inputMode="decimal" value={form.weight} onChange={e=>set("weight",e.target.value)}/></label></div>
-  <label>Gender<select value={form.gender} onChange={e=>set("gender",e.target.value)}><option value="">Select gender</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></label>
-  <label>Main goal<input value={form.goal} onChange={e=>set("goal",e.target.value)} placeholder="e.g. Fat loss"/></label></>}
-  <label>Email<input type="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)} placeholder="you@example.com"/></label>
-  <label>Password<div className="password-wrap"><input type={show?"text":"password"} autoComplete={mode==="login"?"current-password":"new-password"} value={form.password} onChange={e=>set("password",e.target.value)} placeholder="At least 6 characters"/><button type="button" onClick={()=>setShow(!show)}>{show?"Hide":"Show"}</button></div></label>
-  <button className="primary-btn full" onClick={()=>onSubmit(form)}>{mode==="login"?"Sign in":"Create account"} <ArrowRight size={17}/></button>
-  {mode==="login"&&<><button className="google-btn" onClick={onGoogle}>G <span>Continue with Google</span></button><button className="forgot-btn" onClick={()=>onReset(form.email)}>Forgot password?</button></>}
-  <p className="switch">{mode==="login"?"Don't have an account?":"Already have an account?"} <button onClick={switchMode}>{mode==="login"?"Sign up":"Sign in"}</button></p>
-  <small className="demo-hint">{firebaseConfigured?<>Coach admin email: <b>{ADMIN_EMAIL}</b></>:<>Demo admin: admin@coachflow.demo / admin123</>}</small>
- </div></motion.main>;
+function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
+  const [form, setForm] = useState({ email: "", password: "", name: "", age: "", gender: "", height: "", weight: "", goal: "" }); const [show, setShow] = useState(false);
+  const set = (k, v) => setForm({ ...form, [k]: v });
+  return <motion.main className="auth-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><div className="auth-box">
+    <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
+    <div className="section-label">{mode === "login" ? "WELCOME BACK" : "START YOUR JOURNEY"}</div><h1>{mode === "login" ? "Sign in to your" : "Create your"} <span>account.</span></h1>
+    <p>{mode === "login" ? "Access your personalized coaching dashboard." : "Tell us a little about yourself to get started."}</p>
+    {mode === "signup" && <><label>Full name<input autoComplete="name" value={form.name} onChange={e => set("name", e.target.value)} placeholder="Your name" /></label>
+      <div className="form-row"><label>Age<input inputMode="numeric" value={form.age} onChange={e => set("age", e.target.value)} /></label><label>Height<input inputMode="numeric" value={form.height} onChange={e => set("height", e.target.value)} /></label><label>Weight<input inputMode="decimal" value={form.weight} onChange={e => set("weight", e.target.value)} /></label></div>
+      <label>Gender<select value={form.gender} onChange={e => set("gender", e.target.value)}><option value="">Select gender</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></label>
+      <label>Main goal<input value={form.goal} onChange={e => set("goal", e.target.value)} placeholder="e.g. Fat loss" /></label></>}
+    <label>Email<input type="email" autoComplete="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="you@example.com" /></label>
+    <label>Password<div className="password-wrap"><input type={show ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={e => set("password", e.target.value)} placeholder="At least 6 characters" /><button type="button" onClick={() => setShow(!show)}>{show ? "Hide" : "Show"}</button></div></label>
+    <button className="primary-btn full" onClick={() => onSubmit(form)}>{mode === "login" ? "Sign in" : "Create account"} <ArrowRight size={17} /></button>
+    {mode === "login" && <><button className="google-btn" onClick={onGoogle}>G <span>Continue with Google</span></button><button className="forgot-btn" onClick={() => onReset(form.email)}>Forgot password?</button></>}
+    <p className="switch">{mode === "login" ? "Don't have an account?" : "Already have an account?"} <button onClick={switchMode}>{mode === "login" ? "Sign up" : "Sign in"}</button></p>
+
+  </div></motion.main>;
 }
-function AuthOverlay({mode,close,onSubmit,onGoogle,onReset,switchMode}) { return <div className="overlay"><button className="overlay-close" onClick={close}><X/></button><Auth mode={mode} onSubmit={onSubmit} onGoogle={onGoogle} onReset={onReset} switchMode={switchMode}/></div>; }
-function Reveal({children,delay=0}) { return <motion.div initial={{opacity:0,y:28}} whileInView={{opacity:1,y:0}} viewport={{once:true,amount:.15}} transition={{duration:.6,delay}}>{children}</motion.div> }
-function Toast({message}) { return <motion.div className="toast" initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,y:20}}><Check size={17}/>{message}</motion.div> }
-function Footer(){return <footer><div className="container footer-inner"><div className="brand"><span className="brand-mark">C</span><span>COACH<span className="accent">FLOW</span></span></div><span>© 2026 CoachFlow. Personal coaching platform.</span><span className="social"><Instagram size={17}/></span></div></footer>}
+function AuthOverlay({ mode, close, onSubmit, onGoogle, onReset, switchMode }) { return <div className="overlay"><button className="overlay-close" onClick={close}><X /></button><Auth mode={mode} onSubmit={onSubmit} onGoogle={onGoogle} onReset={onReset} switchMode={switchMode} /></div>; }
+function Reveal({ children, delay = 0 }) { return <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .15 }} transition={{ duration: .6, delay }}>{children}</motion.div> }
+function Toast({ message }) { return <motion.div className="toast" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}><Check size={17} />{message}</motion.div> }
+function Footer() { return <footer><div className="container footer-inner"><div className="brand"><span>COACH<span className="accent">RAFALIA</span></span></div><span>© 2026 COACHRFALIA. Personal coaching platform.</span><a target="_blank" href='https://www.instagram.com/the_wolf_zakaria?stkn=MThnMnU1a2xnb2lmcg=='><span className="social"><Instagram size={17} /></span></a></div></footer> }
 
 export default App;
