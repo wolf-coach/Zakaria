@@ -1,16 +1,16 @@
 {
   "rules": {
     "users": {
-      ".read": "auth != null && auth.token.email === 'YOUR_ADMIN_EMAIL@example.com'",
+      ".read": "auth != null && auth.token.email === 'omar@gmail.com'",
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'YOUR_ADMIN_EMAIL@example.com')",
-        ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'YOUR_ADMIN_EMAIL@example.com')"
+        ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'omar@gmail.com')",
+        ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'omar@gmail.com')"
       }
     },
     "programs": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'YOUR_ADMIN_EMAIL@example.com')",
-        ".write": "auth != null && auth.token.email === 'YOUR_ADMIN_EMAIL@example.com'"
+        ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'omar@gmail.com')",
+        ".write": "auth != null && auth.token.email === 'omar@gmail.com'"
       }
     }
   }
