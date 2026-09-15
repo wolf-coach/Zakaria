@@ -13,12 +13,12 @@ import { getDatabase } from "firebase/database";
 const firebaseConfig = {
   apiKey: "AIzaSyChgpmKYdvhSUEgXFpzslRhtf5QnDs0K8o",
   authDomain: "coaching-wolf.firebaseapp.com",
-  databaseURL: "https://coaching-wolf-default-rtdb.firebaseio.com",
   projectId: "coaching-wolf",
   storageBucket: "coaching-wolf.firebasestorage.app",
   messagingSenderId: "285634070161",
   appId: "1:285634070161:web:f92bf7a887f7cc9e32a130",
-  measurementId: "G-HRFE5VYZ10"
+  measurementId: "G-HRFE5VYZ10",
+  databaseURL: "https://coaching-wolf-default-rtdb.firebaseio.com/"
 };
 
 export const firebaseConfigured = Object.values(firebaseConfig).every(Boolean);
@@ -44,7 +44,10 @@ export async function loginGoogle() {
   if (!firebaseConfigured) return null;
   return signInWithPopup(auth, new GoogleAuthProvider());
 }
-export async function resetPassword(email) { if (!firebaseConfigured) return null; return sendPasswordResetEmail(auth, email); }
+export async function resetPassword(email) {
+  if (!firebaseConfigured) return null;
+  return sendPasswordResetEmail(auth, email);
+}
 export async function logoutFirebase() {
   if (firebaseConfigured) await signOut(auth);
 }
