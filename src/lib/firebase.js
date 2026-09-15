@@ -8,11 +8,12 @@ import {
   signOut,
   sendPasswordResetEmail
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyChgpmKYdvhSUEgXFpzslRhtf5QnDs0K8o",
   authDomain: "coaching-wolf.firebaseapp.com",
+  databaseURL: "https://coaching-wolf-default-rtdb.firebaseio.com",
   projectId: "coaching-wolf",
   storageBucket: "coaching-wolf.firebasestorage.app",
   messagingSenderId: "285634070161",
@@ -26,7 +27,7 @@ let app, auth, db;
 if (firebaseConfigured) {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = getFirestore(app);
+  db = getDatabase(app);
 }
 
 export { auth, db };
