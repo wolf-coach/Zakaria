@@ -577,7 +577,7 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
       {selectedCustomer && <div className="admin-editor panel"><div className="editor-title"><div><div className="section-label">CLIENT</div><h2>{selectedCustomer.name || "Customer"}</h2><small>{selectedCustomer.email}</small></div><span className="status">{selectedCustomer.endDate && new Date(selectedCustomer.endDate) < new Date() ? "EXPIRED" : "ACTIVE"}</span></div><div className="editor-grid">{[["name", "Name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height"], ["weight", "Weight"], ["goal", "Goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health notes"], ["package", "Package"], ["startDate", "Start date"], ["endDate", "Validity end date"]].map(([key, label]) => <label key={key}>{label}<input value={selectedCustomer[key] ?? ""} onChange={e => update(key, e.target.value)} /></label>)}</div><button className="primary-btn" onClick={saveCustomer} disabled={saving}><Save size={17} /> {saving ? "Saving…" : "Save customer"}</button></div>}
     </div> :
       <div className="panel program-admin">
-        <div className="section-label">PROGRAM BUILDER</div><h2>Monday → Sunday</h2>{selectedCustomer ? <p className="program-client">Editing program for <b>{selectedCustomer.name || selectedCustomer.email}</b> · Firebase ID <code>{selectedCustomer.id}</code></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
+        <div className="section-label">PROGRAM BUILDER</div><h2>Monday → Sunday</h2>{selectedCustomer ? <p className="program-client">Program for <b>{selectedCustomer.name || selectedCustomer.email}</b></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
         {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : <div className="admin-day-list">{days.map(day => {
           const dayData = program[day] || { workout: "", exercises: [], meals: [] };
           const exercises = dayData.exercises || [];
@@ -592,13 +592,13 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
           return <div className="day-editor" key={day}>
             <div className="day-title"><b>{day}</b><span>{dayData.workout || "Rest / no workout"}</span></div>
             <label>Workout title<input value={dayData.workout || ""} onChange={e => updateProgram(day, "workout", e.target.value)} placeholder="e.g. Upper body strength" /></label>
-            <div className="program-field-group"><div className="field-group-head"><span>Exercise descriptions</span><button type="button" className="mini-add" onClick={() => addListItem("exercises")}><Plus size={13} /> Add exercise</button></div>
+            <div className="program-field-group"><div className="field-group-head"><span>Exercise descriptions</span><button type="button" className="mini-add" onClick={() => addListItem("exercises")}><i class="fa-regular fa-square-plus"></i> Add exercise</button></div>
               {exercises.length === 0 && <div className="field-empty">No exercises added yet.</div>}
-              {exercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><textarea value={x} onChange={e => setListItem("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} rows="2" /><button type="button" className="remove-item" onClick={() => removeListItem("exercises", i)} aria-label="Remove exercise"><X size={15} /></button></div>)}
+              {exercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><input value={x} onChange={e => setListItem("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} rows="2" /><button type="button" className="remove-item" onClick={() => removeListItem("exercises", i)} aria-label="Remove exercise"><i class="fa-solid fa-trash-can"></i></button></div>)}
             </div>
-            <div className="program-field-group"><div className="field-group-head"><span>Meals</span><button type="button" className="mini-add" onClick={() => addListItem("meals")}><Plus size={13} /> Add meal</button></div>
+            <div className="program-field-group"><div className="field-group-head"><span>Meals</span><button type="button" className="mini-add" onClick={() => addListItem("meals")}><i class="fa-regular fa-square-plus"></i> Add meal</button></div>
               {meals.length === 0 && <div className="field-empty">No meals added yet.</div>}
-              {meals.map((x, i) => <div className="repeat-row" key={`meal-${i}`}><input value={x} onChange={e => setListItem("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeListItem("meals", i)} aria-label="Remove meal"><X size={15} /></button></div>)}
+              {meals.map((x, i) => <div className="repeat-row" key={`meal-${i}`}><input value={x} onChange={e => setListItem("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeListItem("meals", i)} aria-label="Remove meal"><i class="fa-solid fa-trash-can"></i></button></div>)}
             </div>
           </div>;
         })}</div>}
@@ -621,7 +621,7 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
     <label>Email<input type="email" autoComplete="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="you@example.com" /></label>
     <label>Password<div className="password-wrap"><input type={show ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={e => set("password", e.target.value)} placeholder="At least 6 characters" /><button type="button" onClick={() => setShow(!show)}>{show ? "Hide" : "Show"}</button></div></label>
     <button className="primary-btn full" onClick={() => onSubmit(form)}>{mode === "login" ? "Sign in" : "Create account"} <ArrowRight size={17} /></button>
-    {mode === "login" && <><button className="google-btn" onClick={onGoogle}>G <span>Continue with Google</span></button><button className="forgot-btn" onClick={() => onReset(form.email)}>Forgot password?</button></>}
+    {mode === "login" && <><button className="forgot-btn" onClick={() => onReset(form.email)}>Forgot password?</button></>}
     <p className="switch">{mode === "login" ? "Don't have an account?" : "Already have an account?"} <button onClick={switchMode}>{mode === "login" ? "Sign up" : "Sign in"}</button></p>
 
   </div></motion.main>;
@@ -629,6 +629,25 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
 function AuthOverlay({ mode, close, onSubmit, onGoogle, onReset, switchMode }) { return <div className="overlay"><button className="overlay-close" onClick={close}><X /></button><Auth mode={mode} onSubmit={onSubmit} onGoogle={onGoogle} onReset={onReset} switchMode={switchMode} /></div>; }
 function Reveal({ children, delay = 0 }) { return <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .15 }} transition={{ duration: .6, delay }}>{children}</motion.div> }
 function Toast({ message }) { return <motion.div className="toast" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}><Check size={17} />{message}</motion.div> }
-function Footer() { return <footer><div className="container footer-inner"><div className="brand"><span>COACH<span className="accent">RAFALIA</span></span></div><span>© 2026 COACHRFALIA. Personal coaching platform.</span><a target="_blank" href='https://www.instagram.com/the_wolf_zakaria?stkn=MThnMnU1a2xnb2lmcg=='><span className="social"><Instagram size={17} /></span></a></div></footer> }
+function Footer() { return <footer>
+  <div className="container footer-inner">
+    <div className="brand">
+      <span>COACH<span className="accent">RAFALIA</span>
+      </span>
+    </div>
+      <div className="link-social">
+        <span>
+          © 2026 COACHRFALIA. Personal coaching platform.
+        </span>
+        <div className="icon-social">
+          <a target="_blank" href='https://www.instagram.com/the_wolf_zakaria?stkn=MThnMnU1a2xnb2lmcg=='>
+          <span className="social"><i class="fa-brands fa-instagram"></i></span>
+          </a>
+          <a target="_blank" href='https://wa.me/212681197174?text=Hello%20Coach%20Im%20interested'>
+          <span className="social"><i class="fa-brands fa-whatsapp"></i></span>
+          </a>
+        </div>
+      </div>
+  </div></footer> }
 
 export default App;

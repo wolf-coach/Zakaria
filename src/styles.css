@@ -3,7 +3,7 @@
 :root {
   font-family: var(--main-font);
   color: #151915;
-  background: #f6f7f4;
+  background: #e7efd8;
   line-height: 1.5;
   font-synthesis: none;
   --green: #a5df3f;
@@ -101,8 +101,31 @@ h2 span {
 }
 .mobile-menu {
   display: none;
-  color: #fff;
+  color: var(--green);
 }
+
+main.page {
+    background: #e7efd8;
+}
+
+.link-social {
+    display: grid;
+    gap: 10px;
+}
+
+.icon-social {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+.icon-social a span i{
+    font-size: 24px;
+    color: var(--green);
+}
+
+
+
 .primary-btn,
 .outline-btn,
 .outline-dark,
@@ -664,6 +687,15 @@ h2 span {
   grid-template-columns: 1.7fr 0.8fr;
   gap: 18px;
 }
+button.mini-add {
+    background-color: #2cf591;
+    font-size: 12px;
+    font-weight: 600;
+    color: #636363;
+    padding: 6px 9px;
+    margin: 12px;
+    border-radius: 5px;
+}
 .panel {
   background: #fff;
   border: 1px solid var(--line);
@@ -690,6 +722,17 @@ h2 span {
   padding: 5px;
   border-radius: 12px;
   margin: 25px 0;
+}
+.repeat-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.field-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 .day-tabs button {
   padding: 10px 4px;
