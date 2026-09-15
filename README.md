@@ -1,107 +1,157 @@
-# CoachFlow Coaching Platform — Firebase Customer Manager V7
+# CoachFlow — React + Firebase + GitHub Pages
 
-## What this version does
+This version is fixed for **Firebase Firestore** and **Vite environment variables**.
 
-### V7 authentication/profile fix
-- Signup writes the complete signup form to `users/{uid}` in one Realtime Database write.
-- The Firebase auth listener no longer creates an empty customer document, preventing a race that could leave only the email saved.
-- Customer Dashboard always uses the signed-in Firebase UID and never falls back to Alex/demo data when Firebase is configured.
-- Customer profile and weekly program use Realtime Database real-time listeners, so coach edits can appear in the customer dashboard automatically.
-- Existing accounts whose Realtime Database document already contains only an email must complete their profile again; old data cannot be recovered if it was never stored.
+## The two problems that were fixed
 
-The Admin dashboard is connected to Realtime Database and treats Firebase as the source of truth for customer profiles.
+### 1. GitHub Actions secrets were not automatically available to Vite
 
-### Customer workflow
-1. A customer creates an account from **Sign Up** (Email/Password or Google).
-2. Firebase Authentication creates the account and the app creates `/users/{uid}`.
-3. The customer is immediately sent to their Dashboard.
-4. The coach opens **Admin → Customers** and sees all customer profiles from the Realtime Database `users` collection (the coach/admin account is filtered out).
-5. The coach selects one customer.
-6. The coach edits only that customer's profile and saves it to `/users/{customerUid}`.
-7. The coach opens **Weekly program** and edits Monday–Sunday for the selected customer.
-8. The program is stored at `/programs/{customerUid}`.
-9. The customer's Dashboard reads `/programs/{theirUid}`, so each customer sees only their own program.
+Vite only exposes variables whose names start with `VITE_`, and GitHub repository secrets are not automatically injected into the build.
 
-## Realtime Database structure
+The included workflow `.github/workflows/deploy.yml` maps every GitHub Secret to a `VITE_*` environment variable **before `npm run build`**.
+
+Use these exact secret names:
 
 ```text
-users
-  ├── CUSTOMER_UID_1
-  │   ├── name
-  │   ├── email
-  │   ├── age
-  │   ├── height
-  │   ├── weight
-  │   ├── goal
-  │   ├── allergies
-  │   ├── health
-  │   ├── package
-  │   ├── startDate
-  │   └── endDate
-  └── CUSTOMER_UID_2
-
-programs
-  ├── CUSTOMER_UID_1
-  │   ├── Monday
-  │   ├── Tuesday
-  │   ├── ...
-  │   └── Sunday
-  └── CUSTOMER_UID_2
-      ├── Monday
-      ├── Tuesday
-      ├── ...
-      └── Sunday
+VITE_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID
+VITE_ADMIN_EMAIL
 ```
 
-## Firebase setup
+Important: the old file named `env` was not a Vite `.env` file. Do not rely on it for GitHub Pages.
 
-1. Firebase Console → Authentication → Sign-in method → enable **Email/Password**.
-2. Optionally enable **Google**.
-3. Firebase Console → Realtime Database Database → create the database.
-4. Create your coach account in Authentication → Users.
-5. Set `.env` with your Firebase web configuration and the exact coach email:
+### 2. The app was mixing Firestore and Realtime Database
 
-```env
-VITE_FIREBASE_API_KEY=...
-VITE_FIREBASE_AUTH_DOMAIN=...
-VITE_FIREBASE_PROJECT_ID=...
-VITE_FIREBASE_STORAGE_BUCKET=...
-VITE_FIREBASE_MESSAGING_SENDER_ID=...
-VITE_FIREBASE_APP_ID=...
-VITE_ADMIN_EMAIL=your-coach-email@example.com
+`src/lib/firebase.js` creates a Firestore database with `getFirestore()`, but the app was importing Realtime Database functions such as `ref()` and `onValue()`.
+
+That cannot work correctly.
+
+The app now consistently uses Firestore:
+
+```text
+/users/{uid}
+/programs/{uid}
 ```
 
-6. In `database.rules.json`, replace the admin email with the same coach email and publish the rules in Firebase.
-7. Restart Vite after changing `.env`.
+with `collection`, `doc`, `getDoc`, `setDoc`, and `onSnapshot`.
 
-## Important
+## GitHub Pages setup
 
-The Admin page cannot securely create a Firebase Authentication user from a browser-only React app. The safe workflow is: **customer signs up first → customer appears automatically in Admin → coach assigns the customer's program**. A later production upgrade can add a Cloud Function/Admin SDK invitation system if you want the coach to create customer accounts from Admin.
+1. Push this project to GitHub.
+2. Open **Repository → Settings → Secrets and variables → Actions → Secrets**.
+3. Create the 7 secrets listed above.
+4. Open **Settings → Pages**.
+5. Set **Source** to **GitHub Actions**.
+6. Push to the `main` branch or manually run the `Deploy React/Vite to GitHub Pages` workflow.
+7. Open the URL produced by the Pages deployment.
 
-## Run
+### Firebase Authentication
+
+In Firebase Console → Authentication → Settings → Authorized domains, add your GitHub Pages domain, for example:
+
+```text
+YOUR-GITHUB-USERNAME.github.io
+```
+
+Use your real GitHub username.
+
+## Firebase Admin access
+
+The admin email is controlled by:
+
+```text
+VITE_ADMIN_EMAIL
+```
+
+It must be the **exact same email** as the Firebase Authentication account used by the coach/admin.
+
+The current Firestore rules also use the same email. Update `firestore.rules` if you change the admin email, then publish the rules.
+
+## Firestore rules
+
+Deploy `firestore.rules` to your Firebase project. The application uses Firestore, not Realtime Database.
+
+The old `database.rules.json` file was removed to avoid accidentally configuring the wrong Firebase database.
+
+## Local development
+
+Copy:
+
+```text
+.env.example
+```
+
+to:
+
+```text
+.env.local
+```
+
+and fill in the same values.
+
+Then:
 
 ```bash
 npm install
 npm run dev
 ```
-\n\n## Realtime Database setup\n\nThis V8 uses **Firebase Realtime Database**, not Cloud Firestore. In Firebase Console open **Build → Realtime Database → Create Database**. Then open the **Rules** tab and publish `database.rules.json` from this project. The rules currently use `omar@gmail.com` as the coach email; change it to the exact email of your admin Firebase Authentication account before publishing.\n\nThe customer profile is stored at `users/{uid}` and the weekly program at `programs/{uid}`. The Admin dashboard listens to `/users` in real time, so every customer appears automatically after signup.\n
 
-## V9 critical Realtime Database rule fix
+Restart Vite after changing `.env.local`.
 
-The Admin dashboard reads the entire `users` node with `onValue(ref(db, "users"))`. Realtime Database security rules are not filters: permission granted only at `users/$uid` does not grant permission to read the parent `users` node. The included `database.rules.json` therefore grants the coach/admin email read access at the `users` parent and keeps customer access limited to their own UID.
+## Important security note
 
-**Before publishing:** replace every `omar@gmail.com` in `database.rules.json` with the exact email of the Firebase Authentication account used as Coach/Admin, if different. Then Firebase Console → Realtime Database → Rules → paste/publish the file.
+Firebase web configuration values such as the API key are normally included in the browser bundle. They are not passwords. **Do not put Firebase Admin SDK private keys or service-account JSON in Vite/GitHub Pages secrets.**
 
+`VITE_ADMIN_EMAIL` is also not a secret security boundary because it is shipped to the browser. Real authorization is enforced by Firebase Authentication + Firestore Rules.
 
-### Realtime Database
-This version uses Firebase Realtime Database (not Firestore). For the coaching-wolf project the database URL is:
-`https://coaching-wolf-default-rtdb.firebaseio.com/`
+## Current data model
 
-Publish `database.rules.json` in Firebase → Realtime Database → Rules. Replace `YOUR_ADMIN_EMAIL@example.com` with the exact email of the coach/admin Firebase Authentication account.
+```text
+Firestore
+├── users
+│   ├── CUSTOMER_UID_1
+│   └── CUSTOMER_UID_2
+└── programs
+    ├── CUSTOMER_UID_1
+    └── CUSTOMER_UID_2
+```
 
-After changing `.env`, restart Vite.
+## GitHub Pages deployment (important)
 
-## V12 Program Builder update
-- Meals are now repeatable: use **Add meal** to add as many meal inputs as needed for each day.
-- Exercises are now repeatable description fields: use **Add exercise** and enter sets, reps, rest, and coaching notes in the description.
-- Existing Firebase programs saved as strings remain compatible.
+This project uses Vite. GitHub Repository Secrets are **build-time variables**; they are not available to the browser automatically.
+
+Create these exact Repository Secrets under **Settings → Secrets and variables → Actions → Repository secrets**:
+
+```text
+VITE_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID
+VITE_ADMIN_EMAIL
+```
+
+Then go to **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**.
+
+Do not use “Deploy from a branch” for this project, because that method does not run the Vite build with the GitHub Secrets.
+
+Push to the `main` branch. The workflow `.github/workflows/deploy.yml` injects the secrets, checks that none are empty, runs `npm run build`, and deploys `dist` to GitHub Pages.
+
+### Firebase Authentication
+
+In Firebase Console → Authentication → Settings → Authorized domains, add the GitHub Pages hostname, for example:
+
+```text
+YOUR-USERNAME.github.io
+```
+
+The Firestore rules must also contain the same admin email as `VITE_ADMIN_EMAIL`.
+
+### Local Codespace
+
+For Codespaces/local development, create `.env.local` in the repository root using `.env.example`. Do not commit `.env.local`.
