@@ -707,7 +707,7 @@ h2 span {
 .day-tabs button.active {
   background: #172018;
   color: var(--green);
-  box-shadow: 0 4px 12px #00012;
+  box-shadow: 0 4px 12px #37374946;
 }
 .program-heading {
   display: flex;
