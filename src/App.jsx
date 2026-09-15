@@ -363,7 +363,7 @@ function Nav({ page, go, isCustomer, isAdmin, logout }) {
 }
 function Home({ go }) {
   const packs = [
-    { name: "Starter", price: "500MAD", desc: "Build the foundation.", items: ["Personal assessment", "Weekly training plan", "Nutrition basics"] },
+    { name: "1 To 1", price: "500MAD", desc: "Anytime - Anywhere.", items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics"] },
     { name: "Transformation", price: "999MAD", desc: "Your complete transformation.", popular: true, items: ["Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking"] },
     { name: "Elite", price: "1159MAD", desc: "Maximum accountability.", items: ["Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] }
   ];
