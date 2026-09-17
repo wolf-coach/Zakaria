@@ -5,6 +5,14 @@ import {
   LayoutDashboard, LogIn, LogOut, Menu, Play, Plus, ShieldCheck, Star,
   Target, User, Users, Utensils, X, CalendarDays, Clock3, Save
 } from "lucide-react";
+import { Swiper, SwiperSlide } from "swiper/react"; 
+import "swiper/css";
+import Img1 from "./data/img1.jpeg";
+import Img2 from "./data/img2.jpeg";
+import Img3 from "./data/img3.jpeg";
+import Img4 from "./data/img4.jpeg";
+
+import { Autoplay, Navigation } from "swiper/modules";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword } from "./lib/firebase";
 import { ref, get, set, update, onValue } from "firebase/database";
@@ -364,8 +372,8 @@ function Nav({ page, go, isCustomer, isAdmin, logout }) {
 function Home({ go }) {
   const packs = [
     { name: "Basic", price: "1000MAD", desc: "1 To 1 At Gym Metroflex.", items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
-    { name: "Transformation", price: "1200MAD", desc: "1 To 1 In Your Home Or Your Gym", popular: true, items: ["Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking"] },
-    { name: "Special", price: "2000MAD",month: "3" ,desc: "Maximum accountability.", items: ["Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] }
+    { name: "Transformation", price: "1200MAD", desc: "1 To 1 In Your Home Or Your Gym", popular: true, items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
+    { name: "Special", price: "2000MAD",month: "3" ,desc: "Maximum accountability.", items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] }
   ];
   const reviews = [
     ["Omar R.", "Lost 9 kg in 12 weeks. The plan was simple, clear and actually sustainable.", "5.0"],
@@ -386,8 +394,43 @@ function Home({ go }) {
         <motion.div className="hero-card-wrap" initial={{ scale: .9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: .8, delay: .15 }}>
           <div className="hero-card">
             <div className="hero-card-top"><span>YOUR NEXT LEVEL</span><span className="live-dot">● LIVE</span></div>
-            <div className="hero-photo"><div className="photo-overlay"><div className="metric"></div></div></div>
-            <div className="mini-stats"><div><b>12</b><span>Weeks</span></div><div><b>4.8</b><span>Rating</span></div><div><b>24/7</b><span>Support</span></div></div>
+            <div className="hero-photo">
+              <div className="photo-overlay">
+                 <Swiper className="mySwiper"
+                    spaceBetween={30}
+                    centeredSlides={true}
+                    autoplay={{
+                      delay: 2500,
+                      disableOnInteraction: false,
+                    }}
+                    pagination={{
+                      clickable: true,
+                    }}
+                   
+                    modules={[Autoplay, Navigation]}
+                   
+                 >
+                  <SwiperSlide><img src={Img1} className="imgs-swiper" alt="image"/></SwiperSlide>
+                  <SwiperSlide><img src={Img2} className="imgs-swiper" alt="image"/></SwiperSlide>
+                  <SwiperSlide><img src={Img3} className="imgs-swiper" alt="image"/></SwiperSlide>
+                  <SwiperSlide><img src={Img4} className="imgs-swiper" alt="image"/></SwiperSlide>
+                  
+                </Swiper>
+              </div>
+            </div>
+            <div className="mini-stats">
+              <div>
+                <b>12</b>
+                <span>Weeks</span>
+              </div>
+              <div><b>4.8</b>
+              <span>Rating</span>
+              </div>
+              <div>
+                <b>24/7</b>
+                <span>Support</span>
+              </div>
+            </div>
           </div>
         </motion.div>
       </div>
