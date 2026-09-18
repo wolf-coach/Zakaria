@@ -1457,3 +1457,325 @@ footer {
   min-height: 160px;
   padding: 30px;
 }
+
+
+
+/* Signup gender picker — matches the package picker with the same animated popup style. */
+.gender-field-label {
+  position: relative;
+  z-index: 21;
+}
+
+.gender-select {
+  position: relative;
+  width: 100%;
+}
+
+.gender-trigger {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #273027;
+  border-radius: 10px;
+  background: #0c110d;
+  color: #a9b2aa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  transition: border-color .2s, box-shadow .2s, background .2s, transform .2s;
+}
+
+.gender-trigger:hover,
+.gender-trigger.selected {
+  border-color: #8fbd38;
+  background: #101710;
+}
+
+.gender-trigger:focus-visible {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px #a5df3f1c;
+}
+
+.gender-trigger-main,
+.gender-trigger-side {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.gender-trigger-main {
+  min-width: 0;
+}
+
+.gender-trigger-main svg {
+  color: var(--green);
+  flex: 0 0 auto;
+}
+
+.gender-trigger.selected .gender-trigger-main {
+  color: #fff;
+  font-weight: 700;
+}
+
+.gender-trigger-side {
+  color: #8e998f;
+  flex: 0 0 auto;
+}
+
+.gender-trigger-side .rotated {
+  transform: rotate(180deg);
+}
+
+.gender-options {
+  position: absolute;
+  z-index: 90;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  padding: 7px;
+  background: #111612;
+  border: 1px solid #ffffff18;
+  border-radius: 14px;
+  box-shadow: 0 24px 55px #000b;
+  transform-origin: top center;
+}
+
+.gender-option {
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  border-radius: 10px;
+  color: #d9dfda;
+  text-align: left;
+  transition: background .18s;
+}
+
+.gender-option:hover,
+.gender-option.active {
+  background: #1b241b;
+}
+
+.gender-option.active {
+  box-shadow: inset 2px 0 0 var(--green);
+}
+
+.gender-option-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #1d281c;
+  color: var(--green);
+}
+
+.gender-option-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.gender-option-copy b {
+  font-size: 12px;
+  color: #fff;
+}
+
+.gender-option-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #78847b;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.gender-option > svg {
+  color: var(--green);
+}
+
+@media (max-width: 520px) {
+  .gender-options {
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .gender-option-copy small {
+    white-space: normal;
+    line-height: 1.25;
+  }
+}
+
+/* Signup package picker — custom animated popup, while preserving the existing form styling. */
+.package-field-label {
+  position: relative;
+  z-index: 20;
+}
+
+.package-select {
+  position: relative;
+  width: 100%;
+}
+
+.package-trigger {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #273027;
+  border-radius: 10px;
+  background: #0c110d;
+  color: #a9b2aa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+}
+
+.package-trigger:hover,
+.package-trigger.selected {
+  border-color: #8fbd38;
+  background: #101710;
+}
+
+.package-trigger:focus-visible {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px #a5df3f1c;
+}
+
+.package-trigger-main,
+.package-trigger-side {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.package-trigger-main {
+  min-width: 0;
+}
+
+.package-trigger-main svg {
+  color: var(--green);
+  flex: 0 0 auto;
+}
+
+.package-trigger.selected .package-trigger-main {
+  color: #fff;
+  font-weight: 700;
+}
+
+.package-trigger-side {
+  color: #8e998f;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.package-trigger-side .rotated {
+  transform: rotate(180deg);
+}
+
+.package-options {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  padding: 7px;
+  background: #111612;
+  border: 1px solid #ffffff18;
+  border-radius: 14px;
+  box-shadow: 0 24px 55px #000b;
+  transform-origin: top center;
+}
+
+.package-option {
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 9px;
+  border-radius: 10px;
+  color: #d9dfda;
+  text-align: left;
+  transition: background .18s;
+}
+
+.package-option:hover,
+.package-option.active {
+  background: #1b241b;
+}
+
+.package-option.active {
+  box-shadow: inset 2px 0 0 var(--green);
+}
+
+.package-option-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #1d281c;
+  color: var(--green);
+}
+
+.package-option-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.package-option-copy b {
+  font-size: 12px;
+  color: #fff;
+}
+
+.package-option-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #78847b;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.package-option > strong {
+  color: var(--green);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.package-option > svg {
+  color: var(--green);
+}
+
+@media (max-width: 520px) {
+  .package-options {
+    max-height: 245px;
+    overflow-y: auto;
+  }
+
+  .package-option {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+
+  .package-option > svg {
+    display: none;
+  }
+
+  .package-option-copy small {
+    white-space: normal;
+    line-height: 1.25;
+  }
+}

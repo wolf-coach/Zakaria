@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ArrowRight, Check, ChevronDown, Dumbbell, Flame, HeartPulse, Instagram,
+  ArrowRight, Check, ChevronDown, Dumbbell, Flame, HeartPulse, Instagram, Package as PackageIcon,
   LayoutDashboard, LogIn, LogOut, Menu, Play, Plus, ShieldCheck, Star,
   Target, User, Users, Utensils, X, CalendarDays, Clock3, Save
 } from "lucide-react";
@@ -49,6 +49,12 @@ const emptyCustomer = {
   id: "", name: "", email: "", age: "", gender: "", height: "", weight: "",
   goal: "", allergies: "", health: "", phone: "", package: "", startDate: "", endDate: ""
 };
+
+const CUSTOMER_PACKAGES = [
+  { value: "Basic", price: "1000 MAD", description: "1 to 1 at Gym Metroflex." },
+  { value: "Transformation", price: "1200 MAD", description: "1 to 1 at your home or your gym." },
+  { value: "Special Promo", price: "2000 MAD", description: "Maximum accountability." }
+];
 
 function useLocalState(key, initial) {
   const [value, setValue] = useState(() => {
@@ -175,6 +181,7 @@ function App() {
       const email = form.email.trim().toLowerCase();
       if (!email) throw new Error("Please enter your email.");
       if (form.password.length < 6) throw new Error("Password must be at least 6 characters.");
+      if (mode === "signup" && !String(form.package || "").trim()) throw new Error("Please choose a coaching package.");
 
       if (firebaseConfigured) {
         const result = mode === "signup"
@@ -219,7 +226,8 @@ function App() {
             height: form.height === "" ? "" : Number(form.height),
             weight: form.weight === "" ? "" : Number(form.weight),
             goal: String(form.goal || "").trim(),
-            gender: String(form.gender || "").trim()
+            gender: String(form.gender || "").trim(),
+            package: String(form.package || "").trim()
           };
           await set(profileRef, profile);
           setCustomer(profile);
@@ -255,7 +263,7 @@ function App() {
       const existing = customers.find(c => c.email?.toLowerCase() === email);
       const profile = mode === "login"
         ? (existing || { ...emptyCustomer, id: crypto.randomUUID(), email })
-        : { ...emptyCustomer, id: crypto.randomUUID(), email, name: form.name || "", age: Number(form.age || 0), height: Number(form.height || 0), weight: Number(form.weight || 0), goal: form.goal || "" };
+        : { ...emptyCustomer, id: crypto.randomUUID(), email, name: form.name || "", age: Number(form.age || 0), height: Number(form.height || 0), weight: Number(form.weight || 0), goal: form.goal || "", package: form.package || "" };
       setCustomer(profile);
       setCustomers(prev => prev.some(x => x.email?.toLowerCase() === email) ? prev : [...prev, profile]);
       setAuthMode(null);
@@ -351,20 +359,33 @@ function App() {
 }
 
 function Nav({ page, go, isCustomer, isAdmin, logout }) {
-  const [open, setOpen] = useState(false); const close = () => setOpen(false);
+  const [open, setOpen] = useState(false);
+  const navRef = useRef(null);
+  const close = () => setOpen(false);
+
+  // Close the mobile navigation when the user clicks/taps anywhere outside it.
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (event) => {
+      if (navRef.current && !navRef.current.contains(event.target)) close();
+    };
+    document.addEventListener("pointerdown", handleOutside);
+    return () => document.removeEventListener("pointerdown", handleOutside);
+  }, [open]);
+
   const section = (id) => { close(); if (page !== "home") { go("home"); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 100); } else document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); };
-  return <header className="nav"><div className="nav-inner">
+  return <header className="nav" ref={navRef}><div className="nav-inner">
     <button className="brand" onClick={() => { close(); go("home") }}>
-      <span>COACH<span className="accent">RAFALIA</span>
-      </span>
+      <span>COACH<span className="accent">RAFALIA</span></span>
     </button>
-    <button className="mobile-menu" aria-label="Toggle menu" onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
+    <button className="mobile-menu" aria-label="Toggle menu" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
     <nav className={open ? "nav-links open" : "nav-links"}>
       <button onClick={() => { close(); go("home") }}>Home</button>
       <button onClick={() => section("about")}>About</button>
       <button onClick={() => section("packs")}>Packs</button>
       <button onClick={() => section("reviews")}>Reviews</button>
-      {isCustomer && <button onClick={() => { close(); go("dashboard") }}>Dashboard</button>}{isAdmin && <button onClick={() => { close(); go("admin") }}>Admin</button>}
+      {isCustomer && <button onClick={() => { close(); go("dashboard") }}>Dashboard</button>}
+      {isAdmin && <button onClick={() => { close(); go("admin") }}>Admin</button>}
       {isCustomer || isAdmin ? <button className="outline-btn" onClick={() => { close(); logout() }}><LogOut size={15} /> Logout</button> : <button className="primary-btn small" onClick={() => { close(); go("login") }}><LogIn size={15} /> Login</button>}
     </nav>
   </div></header>;
@@ -651,22 +672,70 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
 }
 
 function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
-  const [form, setForm] = useState({ email: "", password: "", name: "", age: "", gender: "", height: "", weight: "", goal: "" }); const [show, setShow] = useState(false);
-  const set = (k, v) => setForm({ ...form, [k]: v });
+  const [form, setForm] = useState({ email: "", password: "", name: "", age: "", gender: "", height: "", weight: "", goal: "", package: "" });
+  const [show, setShow] = useState(false);
+  const [packageOpen, setPackageOpen] = useState(false);
+  const [genderOpen, setGenderOpen] = useState(false);
+  const packageRef = useRef(null);
+  const genderRef = useRef(null);
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const selectedPackage = CUSTOMER_PACKAGES.find(item => item.value === form.package);
+  const selectedGender = form.gender;
+
+  // Both custom popups close naturally when clicking/tapping outside their field.
+  useEffect(() => {
+    if (!packageOpen && !genderOpen) return;
+    const handleOutside = (event) => {
+      if (packageOpen && packageRef.current && !packageRef.current.contains(event.target)) setPackageOpen(false);
+      if (genderOpen && genderRef.current && !genderRef.current.contains(event.target)) setGenderOpen(false);
+    };
+    document.addEventListener("pointerdown", handleOutside);
+    return () => document.removeEventListener("pointerdown", handleOutside);
+  }, [packageOpen, genderOpen]);
+
   return <motion.main className="auth-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><div className="auth-box">
     <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
     <div className="section-label">{mode === "login" ? "WELCOME BACK" : "START YOUR JOURNEY"}</div><h1>{mode === "login" ? "Sign in to your" : "Create your"} <span>account.</span></h1>
     <p>{mode === "login" ? "Access your personalized coaching dashboard." : "Tell us a little about yourself to get started."}</p>
     {mode === "signup" && <><label>Full name<input autoComplete="name" value={form.name} onChange={e => set("name", e.target.value)} placeholder="Your name" /></label>
       <div className="form-row"><label>Age<input inputMode="numeric" value={form.age} onChange={e => set("age", e.target.value)} /></label><label>Height<input inputMode="numeric" value={form.height} onChange={e => set("height", e.target.value)} /></label><label>Weight<input inputMode="decimal" value={form.weight} onChange={e => set("weight", e.target.value)} /></label></div>
-      <label>Gender<select value={form.gender} onChange={e => set("gender", e.target.value)}><option value="">Select gender</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></label>
-      <label>Main goal<input value={form.goal} onChange={e => set("goal", e.target.value)} placeholder="e.g. Fat loss" /></label></>}
+      <label className="gender-field-label">Gender
+        <div className="gender-select" ref={genderRef}>
+          <button type="button" className={selectedGender ? "gender-trigger selected" : "gender-trigger"} onClick={() => { setGenderOpen(prev => !prev); setPackageOpen(false); }} aria-haspopup="listbox" aria-expanded={genderOpen}>
+            <span className="gender-trigger-main"><User size={17} />{selectedGender || "Select your gender"}</span>
+            <span className="gender-trigger-side"><ChevronDown size={17} className={genderOpen ? "rotated" : ""} /></span>
+          </button>
+          <AnimatePresence>
+            {genderOpen && <motion.div className="gender-options" role="listbox" initial={{ opacity: 0, y: -8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: .98 }} transition={{ duration: .18, ease: "easeOut" }}>
+              {[{ value: "Male", description: "Personalized coaching for men." }, { value: "Female", description: "Personalized coaching for women." }, { value: "Other", description: "Choose what feels right for you." }].map(item => <motion.button type="button" role="option" aria-selected={form.gender === item.value} className={form.gender === item.value ? "gender-option active" : "gender-option"} key={item.value} onClick={() => { set("gender", item.value); setGenderOpen(false); }} whileHover={{ x: 3 }} whileTap={{ scale: .98 }}>
+                <span className="gender-option-icon"><User size={16} /></span><span className="gender-option-copy"><b>{item.value}</b><small>{item.description}</small></span>{form.gender === item.value && <Check size={17} />}
+              </motion.button>)}
+            </motion.div>}
+          </AnimatePresence>
+        </div>
+      </label>
+      <label>Main goal<input value={form.goal} onChange={e => set("goal", e.target.value)} placeholder="e.g. Fat loss" /></label>
+      <label className="package-field-label">Coaching package
+        <div className="package-select" ref={packageRef}>
+          <button type="button" className={selectedPackage ? "package-trigger selected" : "package-trigger"} onClick={() => { setPackageOpen(prev => !prev); setGenderOpen(false); }} aria-haspopup="listbox" aria-expanded={packageOpen}>
+            <span className="package-trigger-main"><PackageIcon size={17} />{selectedPackage ? selectedPackage.value : "Choose your package"}</span>
+            <span className="package-trigger-side">{selectedPackage?.price || ""}<ChevronDown size={17} className={packageOpen ? "rotated" : ""} /></span>
+          </button>
+          <AnimatePresence>
+            {packageOpen && <motion.div className="package-options" role="listbox" initial={{ opacity: 0, y: -8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: .98 }} transition={{ duration: .18, ease: "easeOut" }}>
+              {CUSTOMER_PACKAGES.map(item => <motion.button type="button" role="option" aria-selected={form.package === item.value} className={form.package === item.value ? "package-option active" : "package-option"} key={item.value} onClick={() => { set("package", item.value); setPackageOpen(false); }} whileHover={{ x: 3 }} whileTap={{ scale: .98 }}>
+                <span className="package-option-icon"><PackageIcon size={16} /></span><span className="package-option-copy"><b>{item.value}</b><small>{item.description}</small></span><strong>{item.price}</strong>{form.package === item.value && <Check size={17} />}
+              </motion.button>)}
+            </motion.div>}
+          </AnimatePresence>
+        </div>
+      </label>
+    </>}
     <label>Email<input type="email" autoComplete="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="you@example.com" /></label>
     <label>Password<div className="password-wrap"><input type={show ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={e => set("password", e.target.value)} placeholder="At least 6 characters" /><button type="button" onClick={() => setShow(!show)}>{show ? "Hide" : "Show"}</button></div></label>
     <button className="primary-btn full" onClick={() => onSubmit(form)}>{mode === "login" ? "Sign in" : "Create account"} <ArrowRight size={17} /></button>
     {mode === "login" && <><button className="forgot-btn" onClick={() => onReset(form.email)}>Forgot password?</button></>}
     <p className="switch">{mode === "login" ? "Don't have an account?" : "Already have an account?"} <button onClick={switchMode}>{mode === "login" ? "Sign up" : "Sign in"}</button></p>
-
   </div></motion.main>;
 }
 function AuthOverlay({ mode, close, onSubmit, onGoogle, onReset, switchMode }) { return <div className="overlay"><button className="overlay-close" onClick={close}><X /></button><Auth mode={mode} onSubmit={onSubmit} onGoogle={onGoogle} onReset={onReset} switchMode={switchMode} /></div>; }
