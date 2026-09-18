@@ -707,8 +707,8 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
           </button>
           <AnimatePresence>
             {genderOpen && <motion.div className="gender-options" role="listbox" initial={{ opacity: 0, y: -8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: .98 }} transition={{ duration: .18, ease: "easeOut" }}>
-              {[{ value: "Male", description: "Personalized coaching for men." }, { value: "Female", description: "Personalized coaching for women." }, { value: "Other", description: "Choose what feels right for you." }].map(item => <motion.button type="button" role="option" aria-selected={form.gender === item.value} className={form.gender === item.value ? "gender-option active" : "gender-option"} key={item.value} onClick={() => { set("gender", item.value); setGenderOpen(false); }} whileHover={{ x: 3 }} whileTap={{ scale: .98 }}>
-                <span className="gender-option-icon"><User size={16} /></span><span className="gender-option-copy"><b>{item.value}</b><small>{item.description}</small></span>{form.gender === item.value && <Check size={17} />}
+              {[{ value: "Male" }, { value: "Female" }, { value: "Other" }].map(item => <motion.button type="button" role="option" aria-selected={form.gender === item.value} className={form.gender === item.value ? "gender-option active" : "gender-option"} key={item.value} onClick={() => { set("gender", item.value); setGenderOpen(false); }} whileHover={{ x: 3 }} whileTap={{ scale: .98 }}>
+                <span className="gender-option-icon"><User size={16} /></span><span className="gender-option-copy"><b>{item.value}</b></span>{form.gender === item.value && <Check size={17} />}
               </motion.button>)}
             </motion.div>}
           </AnimatePresence>
