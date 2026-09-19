@@ -8,9 +8,9 @@ import { motion, AnimatePresence,
   useAnimationFrame } from "framer-motion";
 import { wrap } from "@motionone/utils";
 import {
-  ArrowRight, Check, ChevronDown, Dumbbell, Flame, HeartPulse, Instagram, Package as PackageIcon,
+  ArrowRight, Bell, Check, ChevronDown, Dumbbell, Flame, HeartPulse, Instagram, Package as PackageIcon, Trash2,
   LayoutDashboard, LogIn, LogOut, Menu, Play, Plus, ShieldCheck, Star,
-  Target, User, Users, Utensils, X, CalendarDays, Clock3, Save
+  Target, User, Users, Utensils, X, CalendarDays, Clock3, Save, CheckCircle2, AlertTriangle, Send, Phone
 } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react"; 
 import "swiper/css";
@@ -22,10 +22,10 @@ import Img4 from "./data/img4.jpeg";
 import { Autoplay, Navigation } from "swiper/modules";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword } from "./lib/firebase";
-import { ref, get, set, update, onValue } from "firebase/database";
+import { ref, get, set, update, remove, onValue } from "firebase/database";
 import { demoCustomer, demoCustomers, demoProgram } from "./data/demo";
 
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "admin@coachflow.demo";
+const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "omar@gmail.com").trim().toLowerCase();
 const days = Object.keys(demoProgram);
 const emptyProgram = Object.fromEntries(days.map(day => [day, { workout: "", exercises: [], meals: [] }]));
 
@@ -119,10 +119,52 @@ const emptyCustomer = {
 };
 
 const CUSTOMER_PACKAGES = [
-  { value: "Basic", price: "1000 MAD", description: "1 to 1 at Gym Metroflex." },
-  { value: "Transformation", price: "1200 MAD", description: "1 to 1 at your home or your gym." },
-  { value: "Special Promo", price: "2000 MAD", description: "Maximum accountability." }
+  { value: "Basic", price: "1000 MAD", months: 1, description: "1 to 1 at Gym Metroflex." },
+  { value: "Transformation", price: "1200 MAD", months: 1, description: "1 to 1 at your home or your gym." },
+  { value: "Special Promo", price: "2000 MAD", months: 3, description: "Maximum accountability for 3 months." }
 ];
+
+function getPackageMonths(packageName) {
+  return packageName === "Special Promo" ? 3 : 1;
+}
+
+function getPackageDurationLabel(packageName) {
+  const months = getPackageMonths(packageName);
+  return `${months} month${months === 1 ? "" : "s"}`;
+}
+
+function addPackageMonths(dateString, months = 1) {
+  if (!dateString) return "";
+  const d = new Date(`${dateString}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  const originalDay = d.getDate();
+  d.setMonth(d.getMonth() + Number(months || 1));
+  // If the target month has fewer days, use its last valid day.
+  if (d.getDate() !== originalDay) d.setDate(0);
+  return d.toISOString().slice(0, 10);
+}
+
+function getPackageEndDate(packageName, startDate) {
+  return addPackageMonths(startDate, getPackageMonths(packageName));
+}
+
+function packageProgress(startDate, endDate) {
+  if (!startDate || !endDate) return { remaining: null, percent: 0, active: false, awaiting: true };
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T23:59:59`);
+  const now = new Date();
+  const total = Math.max(1, end.getTime() - start.getTime());
+  const elapsed = Math.min(total, Math.max(0, now.getTime() - start.getTime()));
+  const percent = Math.round(Math.max(0, Math.min(100, 100 - (elapsed / total) * 100)));
+  const remaining = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000));
+  return { remaining, percent, active: now <= end, awaiting: false };
+}
+
+function formatDate(value) {
+  if (!value) return "—";
+  const d = new Date(`${value}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
 
 function useLocalState(key, initial) {
   const [value, setValue] = useState(() => {
@@ -250,6 +292,7 @@ function App() {
       if (!email) throw new Error("Please enter your email.");
       if (form.password.length < 6) throw new Error("Password must be at least 6 characters.");
       if (mode === "signup" && !String(form.package || "").trim()) throw new Error("Please choose a coaching package.");
+      if (mode === "signup" && !String(form.phone || "").trim()) throw new Error("Please enter your phone number.");
 
       if (firebaseConfigured) {
         const result = mode === "signup"
@@ -295,6 +338,7 @@ function App() {
             weight: form.weight === "" ? "" : Number(form.weight),
             goal: String(form.goal || "").trim(),
             gender: String(form.gender || "").trim(),
+            phone: String(form.phone || "").trim(),
             package: String(form.package || "").trim()
           };
           await set(profileRef, profile);
@@ -331,7 +375,7 @@ function App() {
       const existing = customers.find(c => c.email?.toLowerCase() === email);
       const profile = mode === "login"
         ? (existing || { ...emptyCustomer, id: crypto.randomUUID(), email })
-        : { ...emptyCustomer, id: crypto.randomUUID(), email, name: form.name || "", age: Number(form.age || 0), height: Number(form.height || 0), weight: Number(form.weight || 0), goal: form.goal || "", package: form.package || "" };
+        : { ...emptyCustomer, id: crypto.randomUUID(), email, name: form.name || "", age: Number(form.age || 0), height: Number(form.height || 0), weight: Number(form.weight || 0), goal: form.goal || "", phone: form.phone || "", package: form.package || "" };
       setCustomer(profile);
       setCustomers(prev => prev.some(x => x.email?.toLowerCase() === email) ? prev : [...prev, profile]);
       setAuthMode(null);
@@ -413,7 +457,7 @@ function App() {
       <AnimatePresence mode="wait">
         {page === "home" && <Home key="home" go={go} />}
         {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} go={go} />}
-        {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} />}
+        {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} go={go} />}
         {page === "admin" && isAdmin && <Admin key="admin" customers={customers} setCustomers={setCustomers} program={program} setProgram={setProgram} notify={notify} />}
         {page === "login" && <Auth key="login" mode="login" onSubmit={(f) => handleAuth("login", f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthMode("signup")} />}
       </AnimatePresence>
@@ -556,17 +600,15 @@ function Home({ go }) {
       <Reveal><div className="section-label">01 — ABOUT THE COACH</div><h2>Coaching that fits <span>your life.</span></h2><p>I believe fitness should make your life better — not take it over. My coaching combines smart training, practical nutrition and real accountability to create results you can keep.</p><p>Every client gets a plan built around their current level, schedule, preferences and goal.</p><button className="text-btn">Meet your coach <ArrowRight size={17} /></button></Reveal>
       <Reveal delay={.15}><div className="about-card"><div className="about-icon"><Target /></div><h3>Personal. Measurable. Sustainable.</h3><div className="about-list"><span><Check />Individual training</span><span><Check />Personal nutrition</span><span><Check />Weekly accountability</span><span><Check />Progress adjustments</span></div></div></Reveal>
     </div>
-      <section className="parallax-section">
-      <ParallaxText baseVelocity={5} >OMAR 🏋️ COACH 🧘‍♂️ PERSONEL🥇</ParallaxText>
-      </section>
+    
+        <section className="parallax-section">
+          <ParallaxText baseVelocity={-5}>ZAKARIA RAFALIA <i class="fa-solid fa-dumbbell"></i> COACH PERSONEL <i class="fa-solid fa-heart-pulse"></i></ParallaxText>
+        </section>
     </section>
     
 
 
 
-        <section className="parallax-section">
-          <ParallaxText baseVelocity={-5}>ZAKARIA RAFALIA <i class="fa-solid fa-dumbbell"></i> COACH PERSONEL <i class="fa-solid fa-heart-pulse"></i></ParallaxText>
-        </section>
 
 
 
@@ -586,24 +628,113 @@ function Home({ go }) {
 
 function Dashboard({ customer, program, go }) {
   const [selected, setSelected] = useState("Monday");
+  const [notifications, setNotifications] = useState([]);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const notificationRef = useRef(null);
   const d = normalizeDay(program?.[selected]);
-  const remaining = customer.endDate ? Math.max(0, Math.ceil((new Date(customer.endDate) - new Date()) / (1000 * 60 * 60 * 24))) : null;
+  const progress = packageProgress(customer.startDate, customer.endDate);
   const firstName = customer.name?.trim()?.split(" ")[0] || "there";
+
+  useEffect(() => {
+    if (!firebaseConfigured || !db || !auth?.currentUser?.uid) return;
+    const notificationsRef = ref(db, `notifications/${auth.currentUser.uid}`);
+    return onValue(notificationsRef, (snap) => {
+      const raw = snap.val() || {};
+      const list = Object.entries(raw).map(([id, value]) => ({ id, ...(value || {}) }))
+        .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+      setNotifications(list);
+    }, (e) => console.error("Could not load notifications", e));
+  }, [customer.id]);
+
+  useEffect(() => {
+    const close = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) setNotificationOpen(false);
+    };
+    if (!notificationOpen) return;
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [notificationOpen]);
+
+  const packageNotification = progress.awaiting
+    ? { id: "package-pending", title: "Package awaiting confirmation", message: "Your coach will confirm your package start date and end date.", createdAt: Date.now(), system: true }
+    : progress.remaining > 0 && progress.remaining <= 7
+      ? { id: `package-expiry-${customer.endDate}`, title: `Your package expires in ${progress.remaining} day${progress.remaining === 1 ? "" : "s"}.`, message: `Your ${customer.package || "coaching"} package ends on ${formatDate(customer.endDate)}.`, createdAt: Date.now(), system: true }
+      : progress.remaining === 0
+        ? { id: `package-expired-${customer.endDate}`, title: "Your package has expired.", message: `Your package ended on ${formatDate(customer.endDate)}. Contact your coach for the next step.`, createdAt: Date.now(), system: true }
+        : null;
+  const visibleNotifications = packageNotification ? [packageNotification, ...notifications] : notifications;
+  const unreadCount = visibleNotifications.filter(n => !n.read).length;
+
+  const markRead = async (id) => {
+    if (!firebaseConfigured || !db || id.startsWith("package-")) return;
+    try { await update(ref(db, `notifications/${auth.currentUser.uid}/${id}`), { read: true }); } catch (e) { console.error(e); }
+  };
+  const deleteNotification = async (id) => {
+    if (id.startsWith("package-")) return;
+    if (!firebaseConfigured || !db || !auth?.currentUser?.uid) {
+      setNotifications(current => current.filter(notification => notification.id !== id));
+      return;
+    }
+    try {
+      await remove(ref(db, `notifications/${auth.currentUser.uid}/${id}`));
+    } catch (e) {
+      console.error("Could not delete notification", e);
+    }
+  };
+  const section = (id) => { close(); if (page !== "home") { go("home"); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 100); } else document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); };
+
   return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
     <div className="container">
-      <div className="dash-head"><div><div className="section-label">CLIENT DASHBOARD</div><h1>Good morning, <span>{firstName}.</span></h1><p>Stay consistent. Small actions, big results.</p></div><button className="outline-dark" onClick={() => go("profile")}><User size={17} /> My profile</button></div>
-      <div className="dash-stats"><Stat icon={Target} label="Goal" value={customer.goal || "Not set"} /><Stat icon={Flame} label="Current weight" value={customer.weight ? `${customer.weight} kg` : "Not set"} /><Stat icon={Clock3} label="Plan remaining" value={remaining === null ? "—" : `${remaining} days`} /><Stat icon={ShieldCheck} label="Package" value={customer.package || "Not assigned"} /></div>
+      <div className="dash-head">
+        <div><div className="section-label">CLIENT DASHBOARD</div><h1>Good morning, <span>{firstName}.</span></h1><p>Stay consistent. Small actions, big results.</p></div>
+        <div className="dash-actions">
+          <div className="notification-wrap" ref={notificationRef}>
+            <motion.button className="notification-button" onClick={() => setNotificationOpen(v => !v)} whileTap={{ scale: .94 }} aria-label="Notifications">
+              <Bell size={19} />{unreadCount > 0 && <motion.span className="notification-badge" initial={{ scale: 0 }} animate={{ scale: 1 }}>{unreadCount > 9 ? "9+" : unreadCount}</motion.span>}
+            </motion.button>
+            <AnimatePresence>
+              {notificationOpen && <motion.div className="notification-panel" initial={{ opacity: 0, y: -10, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: .97 }} transition={{ type: "spring", stiffness: 420, damping: 28 }}>
+                <div className="notification-head"><div><span className="section-label">INBOX</span><h3>Notifications</h3></div><div className="notification-head-actions"><span>{visibleNotifications.length}</span><button type="button" className="notification-close" onClick={() => setNotificationOpen(false)} aria-label="Close notifications"><X size={16} /></button></div></div>
+                {visibleNotifications.length === 0 ? <div className="notification-empty"><Bell size={20} /><p>No new notifications.</p></div> : <div className="notification-list">
+                  {visibleNotifications.slice(0, 8).map(n => <motion.div key={n.id} className={`notification-item ${n.read ? "read" : ""}`} onClick={() => markRead(n.id)} whileHover={{ x: 3 }} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") markRead(n.id); }}>
+                    <span className="notification-icon"><Bell size={15} /></span><span className="notification-copy"><b>{n.title}</b><small>{n.message}</small><em>{n.createdAt && !n.system ? new Date(Number(n.createdAt)).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }) : "Now"}</em></span>
+                    {!n.system && <button type="button" className="notification-delete" onClick={event => { event.stopPropagation(); deleteNotification(n.id); }} aria-label={`Delete notification: ${n.title}`} title="Delete notification"><Trash2 size={15} /></button>}
+                  </motion.div>)}
+                </div>}
+              </motion.div>}
+            </AnimatePresence>
+          </div>
+
+          <button className="outline-dark" onClick={() => go("profile")}><User size={17} /> My profile</button>
+        </div>
+      </div>
+
+      <div className="dash-stats">
+        <Stat icon={Target} label="Goal" value={customer.goal || "Not set"} />
+        <Stat icon={Flame} label="Current weight" value={customer.weight ? `${customer.weight} kg` : "Not set"} />
+        <Stat icon={Clock3} label="Plan remaining" value={progress.remaining === null ? "Awaiting admin" : `${progress.remaining} days`} />
+        <Stat icon={ShieldCheck} label="Package" value={customer.package || "Not assigned"} />
+      </div>
+
+      <section className="package-progress-card panel">
+        <div className="package-progress-top"><div><span className="section-label">YOUR PACKAGE</span><h2>{customer.package || "Package not assigned"}</h2></div><span className={`package-status ${progress.awaiting ? "pending" : progress.active ? "active" : "expired"}`}>{progress.awaiting ? "AWAITING ADMIN" : progress.active ? "ACTIVE" : "EXPIRED"}</span></div>
+        {progress.awaiting ? <div className="package-awaiting"><AlertTriangle size={19} /><div><b>Dates are waiting for admin confirmation.</b><p>Your coach needs to confirm your package start date. Your package end date will then be calculated automatically.</p></div></div> : <>
+          <div className="package-dates"><span><small>START DATE</small><b>{formatDate(customer.startDate)}</b></span><span><small>END DATE</small><b>{formatDate(customer.endDate)}</b></span><span><small>TIME</small><b>{getPackageDurationLabel(customer.package)}</b></span><span><small>REMAINING</small><b>{progress.remaining} day{progress.remaining === 1 ? "" : "s"}</b></span></div>
+          <div className="progress-track"><motion.div className="progress-fill" initial={{ width: 0 }} animate={{ width: `${progress.percent}%` }} transition={{ duration: 1.1, type: "spring", stiffness: 70, damping: 18 }} /></div>
+          <div className="progress-meta"><span>{progress.percent}% remaining</span><span>{progress.remaining === 0 ? "Package ended" : `${progress.remaining} days left`}</span></div>
+        </>}
+      </section>
+
       <div className="dashboard-grid">
-        <section className="panel week-panel"><div className="panel-title"><div><span className="section-label">THIS WEEK</span><h2>Your program</h2></div><CalendarDays /></div><div className="day-tabs">{days.map(day => <button className={selected === day ? "active" : ""} onClick={() => setSelected(day)} key={day}>{day.slice(0, 3)}<small>{day}</small></button>)}</div><AnimatePresence mode="wait"><motion.div key={selected} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="program-content"><div className="program-heading"><div className="day-icon"><Dumbbell /></div><div><small>{selected}</small><h3>{d.workout}</h3></div></div><h4>Workout</h4>{d.exercises.map((x, i) => <div className="exercise" key={x}><span>{String(i + 1).padStart(2, "0")}</span><b>{x}</b><Check size={16} /></div>)}<h4>Meals</h4><div className="meal-list">{d.meals.map(x => <div key={x}><Utensils size={16} /><span>{x}</span></div>)}</div></motion.div></AnimatePresence></section>
+        <section className="panel week-panel"><div className="panel-title"><div><span className="section-label">THIS WEEK</span><h2>Your program</h2></div><CalendarDays /></div><div className="day-tabs">{days.map(day => <button className={selected === day ? "active" : ""} onClick={() => setSelected(day)} key={day}>{day.slice(0, 3)}<small>{day}</small></button>)}</div><AnimatePresence mode="wait"><motion.div key={selected} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="program-content"><div className="program-heading"><div className="day-icon"><Dumbbell /></div><div><small>{selected}</small><h3>{d.workout || "Your workout will appear here."}</h3></div></div><h4>Workout</h4>{d.exercises.map((x, i) => <div className="exercise" key={`${x}-${i}`}><span>{String(i + 1).padStart(2, "0")}</span><b>{x}</b><Check size={16} /></div>)}<h4>Meals</h4><div className="meal-list">{d.meals.map((x, i) => <div key={`${x}-${i}`}><Utensils size={16} /><span>{x}</span></div>)}</div></motion.div></AnimatePresence></section>
         <aside className="panel coach-note"><div className="coach-avatar">C</div><div className="section-label">COACH NOTE</div><h3>Consistency beats perfection.</h3><p>Focus on completing today's plan. If something doesn't feel right, message your coach and we'll adjust it.</p><div className="note-line"><Check /> Personalized for you</div><div className="note-line"><Check /> Weekly adjustments</div></aside>
       </div>
     </div>
   </motion.main>
 }
-
 function Stat({ icon: Icon, label, value }) { return <div className="stat-card"><div className="stat-icon"><Icon size={18} /></div><small>{label}</small><b>{value}</b></div> }
 
-function Profile({ customer, setCustomer, notify }) {
+function Profile({ customer, setCustomer, notify, go }) {
   const [form, setForm] = useState(customer);
   const save = async () => {
     try {
@@ -611,14 +742,25 @@ function Profile({ customer, setCustomer, notify }) {
       const normalized = { ...form, id: uid || form.id, email: auth?.currentUser?.email || form.email || "" };
       if (firebaseConfigured && uid && db) await set(ref(db, `users/${uid}`), normalized);
       setCustomer(normalized);
-      notify("Profile updated and saved to Firebase.");
+      notify("Profile updated and saved.");
     } catch (e) {
       console.error(e);
       notify(e?.code === "permission-denied" ? "Firebase blocked this save. Check Firestore Rules." : "Could not save profile.");
     }
   };
   const fields = [["name", "Full name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height (cm)"], ["weight", "Weight (kg)"], ["goal", "Main goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health / medical notes"]];
-  return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}><div className="container narrow"><div className="page-heading"><div className="section-label">MY PROFILE</div><h1>Your personal <span>information.</span></h1><p>Keep your information accurate so your coach can personalize your plan.</p></div><div className="profile-card">{fields.map(([key, label]) => <label key={key}>{label}<input value={form[key] ?? ""} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>)}<button className="primary-btn" onClick={save}><Save size={17} /> Save changes</button></div></div></motion.main>
+  return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
+    <div className="container narrow">
+      <div className="page-heading">
+        <button className="outline-dark profile-back" onClick={() => go("dashboard")}><ArrowRight size={17} /> Back to dashboard</button>
+        <div className="section-label">
+        MY PROFILE
+        </div>
+        <h1>Your personal <span>information.</span>
+        </h1>
+        <p>Keep your information accurate so your coach can personalize your plan.</p>
+        </div>
+        <div className="profile-card">{fields.map(([key, label]) => <label key={key}>{label}<input value={form[key] ?? ""} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>)}<button className="primary-btn" onClick={save}><Save size={17} /> Save changes</button></div></div></motion.main>
 }
 
 function Admin({ customers, setCustomers, program, setProgram, notify }) {
@@ -628,66 +770,57 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   const [programLoading, setProgramLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [programSaving, setProgramSaving] = useState(false);
+  const [notificationTitle, setNotificationTitle] = useState("");
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [notificationSending, setNotificationSending] = useState(false);
+  const programBeforeEditRef = useRef(emptyProgram);
   const [search, setSearch] = useState("");
+  const [startDateDraft, setStartDateDraft] = useState("");
 
-  // Firebase is the source of truth for the coach dashboard. We listen to the
-  // users collection so new customer profiles appear automatically.
   useEffect(() => {
     if (!firebaseConfigured || !db || !auth?.currentUser) {
       setAdminLoading(false);
       if (!selected && customers[0]) setSelected(customers[0].id);
       return;
     }
-
     setAdminLoading(true);
-    const usersRef = ref(db, "users");
-    const unsubscribe = onValue(usersRef, (snap) => {
+    const unsubscribe = onValue(ref(db, "users"), (snap) => {
       const raw = snap.val() || {};
-      const list = Object.entries(raw)
-        .map(([id, data]) => ({ ...emptyCustomer, ...(data || {}), id }))
-        .filter(c => c.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase())
+      const list = Object.entries(raw).map(([id, data]) => ({ ...emptyCustomer, ...(data || {}), id }))
+        .filter(c => c.email?.toLowerCase() !== ADMIN_EMAIL)
         .sort((a, b) => (a.name || a.email || "").localeCompare(b.name || b.email || ""));
-
       setCustomers(list);
-      setSelected(current => {
-        if (current && list.some(c => c.id === current)) return current;
-        return list[0]?.id || null;
-      });
+      setSelected(current => current && list.some(c => c.id === current) ? current : (list[0]?.id || null));
       setAdminLoading(false);
     }, (e) => {
       console.error("Could not load customers", e);
-      setCustomers([]);
-      setSelected(null);
-      setAdminLoading(false);
-      notify(e?.code === "PERMISSION_DENIED"
-        ? "Admin access denied: publish the corrected Realtime Database Rules and use the exact admin email."
-        : "Could not load customers from Firebase. Check the Realtime Database URL.");
+      setCustomers([]); setSelected(null); setAdminLoading(false);
+      notify(e?.code === "PERMISSION_DENIED" || e?.code === "permission-denied" ? `Admin access denied for ${ADMIN_EMAIL}. Check your Realtime Database Rules.` : "Could not load customers from Firebase. Check the Realtime Database URL.");
     });
-
     return () => unsubscribe();
   }, []);
 
   const selectedCustomer = customers.find(x => x.id === selected) || null;
 
-  // Every time the coach chooses a customer, load THAT customer's program.
+  useEffect(() => {
+    setStartDateDraft(selectedCustomer?.startDate || "");
+  }, [selectedCustomer?.id, selectedCustomer?.startDate]);
+
   useEffect(() => {
     if (!firebaseConfigured || !db || !selectedCustomer?.id) {
       setProgram(firebaseConfigured ? emptyProgram : demoProgram);
       return;
     }
-
     setProgramLoading(true);
     const unsubscribe = onValue(ref(db, `programs/${selectedCustomer.id}`), (snap) => {
-      const data = snap.val();
-      setProgram(normalizeProgram(data));
+      const normalized = normalizeProgram(snap.val());
+      setProgram(normalized);
+      programBeforeEditRef.current = normalized;
       setProgramLoading(false);
     }, (e) => {
       console.error("Could not load customer program", e);
-      setProgram(emptyProgram);
-      setProgramLoading(false);
-      notify(e?.code === "permission-denied"
-        ? "Firebase denied program access. Publish the Realtime Database Rules."
-        : "Could not load this customer's program.");
+      setProgram(emptyProgram); setProgramLoading(false);
+      notify(e?.code === "permission-denied" ? "Firebase denied program access. Publish the Realtime Database Rules." : "Could not load this customer's program.");
     });
     return () => unsubscribe();
   }, [selectedCustomer?.id]);
@@ -696,94 +829,164 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
     const q = search.trim().toLowerCase();
     return !q || [c.name, c.email, c.goal, c.package].some(v => String(v || "").toLowerCase().includes(q));
   });
+  const activeCount = customers.filter(c => { const p = packageProgress(c.startDate, c.endDate); return !p.awaiting && p.active; }).length;
+  const pendingCount = customers.filter(c => !c.startDate || !c.endDate).length;
+  const expiringCount = customers.filter(c => { const p = packageProgress(c.startDate, c.endDate); return !p.awaiting && p.remaining > 0 && p.remaining <= 7; }).length;
 
   const update = (key, val) => setCustomers(prev => prev.map(c => c.id === selected ? { ...c, [key]: val } : c));
+
+  const confirmPackageDates = async () => {
+    if (!selectedCustomer) return notify("Select a customer first.");
+    if (!startDateDraft) return notify("Choose a package start date first.");
+    const months = getPackageMonths(selectedCustomer.package);
+    const duration = getPackageDurationLabel(selectedCustomer.package);
+    const endDate = getPackageEndDate(selectedCustomer.package, startDateDraft);
+    const updatedCustomer = { ...selectedCustomer, startDate: startDateDraft, endDate, packageDuration: duration, packageMonths: months, packageConfirmed: true, packageConfirmedAt: Date.now() };
+    setSaving(true);
+    try {
+      if (firebaseConfigured && db) {
+        await set(ref(db, `users/${selectedCustomer.id}`), updatedCustomer);
+        await set(ref(db, `notifications/${selectedCustomer.id}/package-confirmed-${startDateDraft}`), {
+          title: "Your package dates have been confirmed.",
+          message: `${updatedCustomer.package || "Your package"} starts ${formatDate(startDateDraft)} and ends ${formatDate(endDate)}. Duration: ${duration}.`,
+          createdAt: Date.now(), read: false, type: "package"
+        });
+      } else {
+        setCustomers(prev => prev.map(c => c.id === selected ? updatedCustomer : c));
+      }
+      notify(`Package confirmed: ${formatDate(startDateDraft)} → ${formatDate(endDate)}.`);
+    } catch (e) {
+      console.error(e);
+      notify(e?.code === "permission-denied" ? "Firebase blocked this confirmation. Publish the Realtime Database Rules." : "Could not confirm package dates.");
+    } finally { setSaving(false); }
+  };
 
   const saveCustomer = async () => {
     if (!selectedCustomer) return;
     setSaving(true);
     try {
-      if (firebaseConfigured && db) {
-        await set(ref(db, `users/${selectedCustomer.id}`), selectedCustomer);
-      } else {
-        setCustomers(prev => prev.map(c => c.id === selected ? selectedCustomer : c));
-      }
+      if (firebaseConfigured && db) await set(ref(db, `users/${selectedCustomer.id}`), selectedCustomer);
+      else setCustomers(prev => prev.map(c => c.id === selected ? selectedCustomer : c));
       notify("Customer information saved to Firebase.");
     } catch (e) {
-      console.error(e);
-      notify(e?.code === "permission-denied" ? "Firebase blocked this save. Check Firestore Rules." : "Could not save customer.");
+      console.error(e); notify(e?.code === "permission-denied" ? "Firebase blocked this save. Check Realtime Database Rules." : "Could not save customer.");
     } finally { setSaving(false); }
   };
 
-  const add = () => {
-    notify("Have the customer create their account with Sign Up first. They will then appear here automatically.");
-    setTab("customers");
-  };
-
-  const updateProgram = (day, key, val) => {
-    setProgram(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [key]: val } }));
-  };
-
+  const updateProgram = (day, key, val) => setProgram(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [key]: val } }));
   const saveProgram = async () => {
-    if (!selectedCustomer?.id) {
-      notify("Select a customer first.");
-      return;
-    }
+    if (!selectedCustomer?.id) return notify("Select a customer first.");
     setProgramSaving(true);
     try {
+      // Compare against the immutable snapshot captured when this customer's
+      // program was loaded. This makes meal-change detection reliable even
+      // when Firebase sends the current program back through onValue.
+      const before = normalizeProgram(programBeforeEditRef.current || emptyProgram);
+      const after = normalizeProgram(program);
+      const mealChanged = days.some(day =>
+        JSON.stringify(before[day]?.meals || []) !== JSON.stringify(after[day]?.meals || [])
+      );
+      const now = Date.now();
+
       if (firebaseConfigured && db) {
-        await set(ref(db, `programs/${selectedCustomer.id}`), program);
+        await set(ref(db, `programs/${selectedCustomer.id}`), after);
+
+        const notification = mealChanged
+          ? {
+              title: "Your meal plan has been updated.",
+              message: "Your coach updated your meals in your weekly nutrition plan.",
+              type: "meal"
+            }
+          : {
+              title: "Your program has been updated.",
+              message: "Your coach added or changed your weekly training and program.",
+              type: "program"
+            };
+
+        try {
+          await set(ref(db, `notifications/${selectedCustomer.id}/program-${now}`), {
+            ...notification,
+            createdAt: now,
+            read: false
+          });
+        } catch (notificationError) {
+          console.error("Could not send program notification", notificationError);
+          setProgram(after);
+          programBeforeEditRef.current = after;
+          notify(mealChanged
+            ? "Meal plan updated, but the customer notification could not be sent. Publish the latest Realtime Database Rules."
+            : "Program updated, but the customer notification could not be sent. Publish the latest Realtime Database Rules.");
+          return;
+        }
       }
-      notify(`Program saved for ${selectedCustomer.name || selectedCustomer.email}.`);
+
+      setProgram(after);
+      programBeforeEditRef.current = after;
+      notify(mealChanged
+        ? `Meal plan updated and notification sent to ${selectedCustomer.name || selectedCustomer.email}.`
+        : `Program saved for ${selectedCustomer.name || selectedCustomer.email}.`);
+    } catch (e) {
+      console.error("Could not save program or send notification", e);
+      notify(e?.code === "permission-denied"
+        ? "Firebase blocked saving the program. Publish the latest Realtime Database Rules."
+        : "Could not save the program. Check Firebase permissions.");
+    } finally {
+      setProgramSaving(false);
+    }
+  };
+
+  const sendCustomerNotification = async () => {
+    if (!selectedCustomer?.id) return notify("Select a customer first.");
+    const title = notificationTitle.trim();
+    const message = notificationMessage.trim();
+    if (!title || !message) return notify("Enter both a notification title and message.");
+    setNotificationSending(true);
+    try {
+      const now = Date.now();
+      const payload = { title, message, createdAt: now, read: false, type: "admin" };
+      if (firebaseConfigured && db) {
+        await set(ref(db, `notifications/${selectedCustomer.id}/admin-${now}`), payload);
+      } else {
+        notify("Demo mode: notification prepared for this customer.");
+      }
+      setNotificationTitle("");
+      setNotificationMessage("");
+      notify(`Notification sent to ${selectedCustomer.name || selectedCustomer.email}.`);
     } catch (e) {
       console.error(e);
-      notify(e?.code === "permission-denied" ? "Firebase blocked this save. Check Firestore Rules." : "Could not save the program to Firebase.");
-    } finally { setProgramSaving(false); }
+      notify(e?.code === "permission-denied" ? "Firebase blocked this notification. Publish the Realtime Database Rules." : "Could not send the notification.");
+    } finally { setNotificationSending(false); }
   };
 
   return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><div className="container">
-    <div className="admin-head"><div><div className="section-label">COACH CONTROL CENTER</div><h1>Admin <span>dashboard.</span></h1><p>Every customer is loaded from Firebase. Select one client and manage only their personal program.</p></div><button className="primary-btn" onClick={add}><Plus size={17} /> Add customer</button></div>
+    <div className="admin-head"><div><div className="section-label">COACH CONTROL CENTER</div><h1>Admin <span>dashboard.</span></h1><p>Manage customer packages, dates, notifications and weekly programs from one place.</p></div><div className="admin-identity"><CheckCircle2 size={16} /> Signed in as <b>{auth?.currentUser?.email || ADMIN_EMAIL}</b></div></div>
+    <div className="admin-summary"><div className="admin-summary-card"><Users size={18} /><span>Total customers</span><b>{customers.length}</b></div><div className="admin-summary-card"><CheckCircle2 size={18} /><span>Active packages</span><b>{activeCount}</b></div><div className="admin-summary-card"><Clock3 size={18} /><span>Awaiting dates</span><b>{pendingCount}</b></div><div className="admin-summary-card"><Bell size={18} /><span>Expires ≤ 7 days</span><b>{expiringCount}</b></div></div>
     <div className="admin-tabs"><button className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}><Users /> Customers <span className="tab-count">{customers.length}</span></button><button className={tab === "program" ? "active" : ""} onClick={() => setTab("program")}><Dumbbell /> Weekly program</button></div>
     {adminLoading ? <div className="panel loading-panel"><div className="spinner" /><h3>Loading customers…</h3><p>Getting all customer profiles from Firebase.</p></div> : tab === "customers" ? <div className="admin-grid">
-      <div className="customer-list">
-        <div className="customer-list-top"><input className="customer-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers…" /><span>{filteredCustomers.length}</span></div>
-        {filteredCustomers.length === 0 ? <div className="empty-state">No customer accounts found.<br />Ask the customer to Sign Up first.</div> : filteredCustomers.map(c => <button className={selected === c.id ? "selected" : ""} key={c.id} onClick={() => setSelected(c.id)}><span className="customer-avatar">{(c.name || c.email || "C")[0]}</span><span><b>{c.name || "Unnamed customer"}</b><small>{c.email}</small></span><ChevronDown size={15} /></button>)}
+      <div className="customer-list"><div className="customer-list-top"><input className="customer-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers…" /><span>{filteredCustomers.length}</span></div>
+        {filteredCustomers.length === 0 ? <div className="empty-state">No customer accounts found.<br />Ask the customer to Sign Up first.</div> : filteredCustomers.map(c => { const p = packageProgress(c.startDate, c.endDate); return <motion.button whileHover={{ x: 2 }} className={selected === c.id ? "selected" : ""} key={c.id} onClick={() => setSelected(c.id)}><span className="customer-avatar">{(c.name || c.email || "C")[0]}</span><span><b>{c.name || "Unnamed customer"}</b><small>{c.email}</small><em className="customer-package-status">{c.package || "No package"} · {p.awaiting ? "Awaiting dates" : `${p.remaining}d left`}</em></span><ChevronDown size={15} /></motion.button>; })}
       </div>
-      {selectedCustomer && <div className="admin-editor panel"><div className="editor-title"><div><div className="section-label">CLIENT</div><h2>{selectedCustomer.name || "Customer"}</h2><small>{selectedCustomer.email}</small></div><span className="status">{selectedCustomer.endDate && new Date(selectedCustomer.endDate) < new Date() ? "EXPIRED" : "ACTIVE"}</span></div><div className="editor-grid">{[["name", "Name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height"], ["weight", "Weight"], ["goal", "Goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health notes"], ["package", "Package"], ["startDate", "Start date"], ["endDate", "Validity end date"]].map(([key, label]) => <label key={key}>{label}<input value={selectedCustomer[key] ?? ""} onChange={e => update(key, e.target.value)} /></label>)}</div><button className="primary-btn" onClick={saveCustomer} disabled={saving}><Save size={17} /> {saving ? "Saving…" : "Save customer"}</button></div>}
-    </div> :
-      <div className="panel program-admin">
-        <div className="section-label">PROGRAM BUILDER</div><h2>Monday → Sunday</h2>{selectedCustomer ? <p className="program-client">Program for <b>{selectedCustomer.name || selectedCustomer.email}</b></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
-        {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : <div className="admin-day-list">{days.map(day => {
-          const dayData = program[day] || { workout: "", exercises: [], meals: [] };
-          const exercises = dayData.exercises || [];
-          const meals = dayData.meals || [];
-          const setListItem = (key, index, value) => {
-            const list = [...(program[day]?.[key] || [])];
-            list[index] = value;
-            updateProgram(day, key, list);
-          };
-          const addListItem = (key) => updateProgram(day, key, [...(program[day]?.[key] || []), ""]);
-          const removeListItem = (key, index) => updateProgram(day, key, (program[day]?.[key] || []).filter((_, i) => i !== index));
-          return <div className="day-editor" key={day}>
-            <div className="day-title"><b>{day}</b><span>{dayData.workout || "Rest / no workout"}</span></div>
-            <label>Workout title<input value={dayData.workout || ""} onChange={e => updateProgram(day, "workout", e.target.value)} placeholder="e.g. Upper body strength" /></label>
-            <div className="program-field-group"><div className="field-group-head"><span>Exercise descriptions</span><button type="button" className="mini-add" onClick={() => addListItem("exercises")}><i class="fa-regular fa-square-plus"></i> Add exercise</button></div>
-              {exercises.length === 0 && <div className="field-empty">No exercises added yet.</div>}
-              {exercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><input value={x} onChange={e => setListItem("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} rows="2" /><button type="button" className="remove-item" onClick={() => removeListItem("exercises", i)} aria-label="Remove exercise"><i class="fa-solid fa-trash-can"></i></button></div>)}
-            </div>
-            <div className="program-field-group"><div className="field-group-head"><span>Meals</span><button type="button" className="mini-add" onClick={() => addListItem("meals")}><i class="fa-regular fa-square-plus"></i> Add meal</button></div>
-              {meals.length === 0 && <div className="field-empty">No meals added yet.</div>}
-              {meals.map((x, i) => <div className="repeat-row" key={`meal-${i}`}><input value={x} onChange={e => setListItem("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeListItem("meals", i)} aria-label="Remove meal"><i class="fa-solid fa-trash-can"></i></button></div>)}
-            </div>
-          </div>;
-        })}</div>}
-        <button className="primary-btn" onClick={saveProgram} disabled={programSaving || programLoading || !selectedCustomer}><Save size={17} /> {programSaving ? "Saving…" : "Save program for this customer"}</button>
+      {selectedCustomer && <div className="admin-editor panel">
+        <div className="editor-title"><div><div className="section-label">CLIENT</div><h2>{selectedCustomer.name || "Customer"}</h2><small>{selectedCustomer.email}</small></div><span className={`status ${packageProgress(selectedCustomer.startDate, selectedCustomer.endDate).awaiting ? "pending-status" : packageProgress(selectedCustomer.startDate, selectedCustomer.endDate).active ? "" : "expired-status"}`}>{packageProgress(selectedCustomer.startDate, selectedCustomer.endDate).awaiting ? "AWAITING DATES" : packageProgress(selectedCustomer.startDate, selectedCustomer.endDate).active ? "ACTIVE" : "EXPIRED"}</span></div>
+        <div className="editor-grid">{[["name", "Name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height"], ["weight", "Weight"], ["goal", "Goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health notes"], ["package", "Package"]].map(([key, label]) => <label key={key}>{label}<input value={selectedCustomer[key] ?? ""} onChange={e => update(key, e.target.value)} /></label>)}</div>
+        <div className="package-confirm-box"><div><span className="section-label">PACKAGE ACTIVATION</span><h3>{selectedCustomer.package || "No package selected"} · {getPackageDurationLabel(selectedCustomer.package)}</h3><p>Choose the start date. The end date is calculated automatically from the selected package and sent to the customer dashboard.</p></div><div className="package-confirm-fields"><label>Start date<input type="date" value={startDateDraft} onChange={e => setStartDateDraft(e.target.value)} /></label><label>Calculated end date<input type="date" value={getPackageEndDate(selectedCustomer.package, startDateDraft)} readOnly /></label></div><div className="confirm-result"><span>Start: <b>{formatDate(startDateDraft || selectedCustomer.startDate)}</b></span><ArrowRight size={15} /><span>End: <b>{formatDate(getPackageEndDate(selectedCustomer.package, startDateDraft || selectedCustomer.startDate) || selectedCustomer.endDate)}</b></span><span className="duration-pill">{getPackageDurationLabel(selectedCustomer.package).toUpperCase()}</span></div><button className="primary-btn" onClick={confirmPackageDates} disabled={saving || !selectedCustomer.package}><CheckCircle2 size={17} /> {saving ? "Confirming…" : "Confirm start & end dates"}</button></div>
+        <button className="outline-dark" onClick={saveCustomer} disabled={saving}><Save size={17} /> {saving ? "Saving…" : "Save customer information"}</button>
+        <div className="customer-notification-box">
+          <div><span className="section-label">DIRECT NOTIFICATION</span><h3>Send to this customer</h3><p>Only <b>{selectedCustomer.name || selectedCustomer.email}</b> will receive this notification.</p></div>
+          <label>Notification title<input value={notificationTitle} onChange={e => setNotificationTitle(e.target.value)} placeholder="e.g. Your next check-in is ready" /></label>
+          <label>Message<textarea value={notificationMessage} onChange={e => setNotificationMessage(e.target.value)} placeholder="Write a message for this customer…" rows={3} /></label>
+          <motion.button className="primary-btn" onClick={sendCustomerNotification} disabled={notificationSending} whileTap={{ scale: .98 }}><Send size={17} /> {notificationSending ? "Sending…" : "Send notification"}</motion.button>
+        </div>
       </div>}
+    </div> : <div className="panel program-admin">
+      <div className="section-label">PROGRAM BUILDER</div><h2>Monday → Sunday</h2>{selectedCustomer ? <p className="program-client">Program for <b>{selectedCustomer.name || selectedCustomer.email}</b></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
+      {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : <div className="admin-day-list">{days.map(day => { const dayData = program[day] || { workout: "", exercises: [], meals: [] }; const exercises = dayData.exercises || []; const meals = dayData.meals || []; const setListItem = (key, index, value) => { const list = [...(program[day]?.[key] || [])]; list[index] = value; updateProgram(day, key, list); }; const addListItem = key => updateProgram(day, key, [...(program[day]?.[key] || []), ""]); const removeListItem = (key, index) => updateProgram(day, key, (program[day]?.[key] || []).filter((_, i) => i !== index)); return <div className="day-editor" key={day}><div className="day-title"><b>{day}</b><span>{dayData.workout || "Rest / no workout"}</span></div><label>Workout title<input value={dayData.workout || ""} onChange={e => updateProgram(day, "workout", e.target.value)} placeholder="e.g. Upper body strength" /></label><div className="program-field-group"><div className="field-group-head"><span>Exercise descriptions</span><button type="button" className="mini-add" onClick={() => addListItem("exercises")}>＋ Add exercise</button></div>{exercises.length === 0 && <div className="field-empty">No exercises added yet.</div>}{exercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><input value={x} onChange={e => setListItem("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} /><button type="button" className="remove-item" onClick={() => removeListItem("exercises", i)} aria-label="Remove exercise">×</button></div>)}</div><div className="program-field-group"><div className="field-group-head"><span>Meals</span><button type="button" className="mini-add" onClick={() => addListItem("meals")}>＋ Add meal</button></div>{meals.length === 0 && <div className="field-empty">No meals added yet.</div>}{meals.map((x, i) => <div className="repeat-row" key={`meal-${i}`}><input value={x} onChange={e => setListItem("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeListItem("meals", i)} aria-label="Remove meal">×</button></div>)}</div></div>; })}</div>}
+      <button className="primary-btn" onClick={saveProgram} disabled={programSaving || programLoading || !selectedCustomer}><Save size={17} /> {programSaving ? "Saving…" : "Save program for this customer"}</button>
+    </div>}
   </div></motion.main>
 }
-
 function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
-  const [form, setForm] = useState({ email: "", password: "", name: "", age: "", gender: "", height: "", weight: "", goal: "", package: "" });
+  const [form, setForm] = useState({ email: "", password: "", name: "", phone: "", age: "", gender: "", height: "", weight: "", goal: "", package: "" });
   const [show, setShow] = useState(false);
   const [packageOpen, setPackageOpen] = useState(false);
   const [genderOpen, setGenderOpen] = useState(false);
@@ -805,11 +1008,19 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
   }, [packageOpen, genderOpen]);
 
   return <motion.main className="auth-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><div className="auth-box">
-    <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
-    <div className="section-label">{mode === "login" ? "WELCOME BACK" : "START YOUR JOURNEY"}</div><h1>{mode === "login" ? "Sign in to your" : "Create your"} <span>account.</span></h1>
+    <div className="brand static">
+      <span>COACH<span className="accent">WOLF</span></span>
+    </div>
+    <div className="section-label">{mode === "login" ? "WELCOME BACK" : "START YOUR JOURNEY"}</div>
+    <h1>{mode === "login" ? "Sign in to your" : "Create your"} <span>account.</span></h1>
     <p>{mode === "login" ? "Access your personalized coaching dashboard." : "Tell us a little about yourself to get started."}</p>
-    {mode === "signup" && <><label>Full name<input autoComplete="name" value={form.name} onChange={e => set("name", e.target.value)} placeholder="Your name" /></label>
-      <div className="form-row"><label>Age<input inputMode="numeric" value={form.age} onChange={e => set("age", e.target.value)} /></label><label>Height<input inputMode="numeric" value={form.height} onChange={e => set("height", e.target.value)} /></label><label>Weight<input inputMode="decimal" value={form.weight} onChange={e => set("weight", e.target.value)} /></label></div>
+    {mode === "signup" && <>
+      <label>Full name<input autoComplete="name" value={form.name} onChange={e => set("name", e.target.value)} placeholder="Your name" /></label>
+      <label>Phone number<input type="tel" inputMode="tel" autoComplete="tel" value={form.phone || ""} onChange={e => set("phone", e.target.value)} placeholder="+212" /></label>
+      <div className="form-row"><label>Age<input inputMode="numeric" value={form.age} onChange={e => set("age", e.target.value)} placeholder="20" /></label>
+      <label>Height<input inputMode="numeric" value={form.height} onChange={e => set("height", e.target.value)} placeholder="170cm" /></label>
+      <label>Weight<input inputMode="decimal" value={form.weight} onChange={e => set("weight", e.target.value)} placeholder="70Kg" /></label>
+      </div>
       <label className="gender-field-label">Gender
         <div className="gender-select" ref={genderRef}>
           <button type="button" className={selectedGender ? "gender-trigger selected" : "gender-trigger"} onClick={() => { setGenderOpen(prev => !prev); setPackageOpen(false); }} aria-haspopup="listbox" aria-expanded={genderOpen}>
@@ -830,12 +1041,12 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
         <div className="package-select" ref={packageRef}>
           <button type="button" className={selectedPackage ? "package-trigger selected" : "package-trigger"} onClick={() => { setPackageOpen(prev => !prev); setGenderOpen(false); }} aria-haspopup="listbox" aria-expanded={packageOpen}>
             <span className="package-trigger-main"><PackageIcon size={17} />{selectedPackage ? selectedPackage.value : "Choose your package"}</span>
-            <span className="package-trigger-side">{selectedPackage?.price || ""}<ChevronDown size={17} className={packageOpen ? "rotated" : ""} /></span>
+            <span className="package-trigger-side">{selectedPackage ? `${selectedPackage.price} · ${selectedPackage.months} month${selectedPackage.months === 1 ? "" : "s"}` : ""}<ChevronDown size={17} className={packageOpen ? "rotated" : ""} /></span>
           </button>
           <AnimatePresence>
             {packageOpen && <motion.div className="package-options" role="listbox" initial={{ opacity: 0, y: -8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: .98 }} transition={{ duration: .18, ease: "easeOut" }}>
               {CUSTOMER_PACKAGES.map(item => <motion.button type="button" role="option" aria-selected={form.package === item.value} className={form.package === item.value ? "package-option active" : "package-option"} key={item.value} onClick={() => { set("package", item.value); setPackageOpen(false); }} whileHover={{ x: 3 }} whileTap={{ scale: .98 }}>
-                <span className="package-option-icon"><PackageIcon size={16} /></span><span className="package-option-copy"><b>{item.value}</b><small>{item.description}</small></span><strong>{item.price}</strong>{form.package === item.value && <Check size={17} />}
+                <span className="package-option-icon"><PackageIcon size={16} /></span><span className="package-option-copy"><b>{item.value}</b><small>{item.description} · {item.months} month{item.months === 1 ? "" : "s"}</small></span><strong>{item.price}</strong>{form.package === item.value && <Check size={17} />}
               </motion.button>)}
             </motion.div>}
           </AnimatePresence>
@@ -843,7 +1054,7 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
       </label>
     </>}
     <label>Email<input type="email" autoComplete="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="you@example.com" /></label>
-    <label>Password<div className="password-wrap"><input type={show ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={e => set("password", e.target.value)} placeholder="At least 6 characters" /><button type="button" onClick={() => setShow(!show)}>{show ? "Hide" : "Show"}</button></div></label>
+    <label>Password<div className="password-wrap"><input type={show ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={e => set("password", e.target.value)} placeholder="Password" /><button type="button" onClick={() => setShow(!show)}>{show ? <i class="fa-solid fa-eye-slash"></i> : <i class="fa-solid fa-eye"></i>}</button></div></label>
     <button className="primary-btn full" onClick={() => onSubmit(form)}>{mode === "login" ? "Sign in" : "Create account"} <ArrowRight size={17} /></button>
     {mode === "login" && <><button className="forgot-btn" onClick={() => onReset(form.email)}>Forgot password?</button></>}
     <p className="switch">{mode === "login" ? "Don't have an account?" : "Already have an account?"} <button onClick={switchMode}>{mode === "login" ? "Sign up" : "Sign in"}</button></p>

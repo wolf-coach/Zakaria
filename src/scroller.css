@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cherry+Bomb+One&family=Kavoon&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Cherry+Bomb+One&family=Kavoon&display=swap");
 
 :root {
   font-family: var(--main-font);
@@ -20,18 +20,16 @@
   left: 0;
   right: 0;
   height: 5px;
-  border:1px solid red;
+  border: 1px solid red;
   bottom: 100px;
 }
 
 .parallax-section {
-  margin: 100px 0;
-  
+  margin: 62px 0 0 0;
 }
 
 .parallax {
   overflow: hidden;
-  letter-spacing: -2px;
   line-height: 0.8;
   margin: 0;
   white-space: nowrap;
@@ -40,10 +38,10 @@
 }
 
 .parallax .scroller {
-  Font-family: 'Cherry Bomb One', cursive;
+  font-family: "Cherry Bomb One", cursive;
   font-weight: 600;
   text-transform: uppercase;
-  font-size: 64px;
+  font-size: 40px;
   display: flex;
   white-space: nowrap;
   display: flex;

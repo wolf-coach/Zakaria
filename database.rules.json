@@ -1,16 +1,25 @@
 {
   "rules": {
     "users": {
-      ".read": "auth != null && auth.token.email === 'omar@gmail.com'",
+      ".read": "auth != null && auth.token.email == 'omar@gmail.com'",
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'omar@gmail.com')",
-        ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'omar@gmail.com')"
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'omar@gmail.com')",
+        ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'omar@gmail.com')"
       }
     },
     "programs": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'omar@gmail.com')",
         ".write": "auth != null && auth.token.email === 'omar@gmail.com'"
+      }
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'omar@gmail.com')",
+        ".write": "auth != null && auth.token.email == 'omar@gmail.com'",
+        "$notificationId": {
+          ".write": "auth != null && (auth.token.email == 'omar@gmail.com' || (auth.uid == $uid && ((!newData.exists()) || (data.exists() && newData.exists() && data.child('title').val() == newData.child('title').val() && data.child('message').val() == newData.child('message').val() && data.child('createdAt').val() == newData.child('createdAt').val() && newData.child('read').isBoolean()))))"
+        }
       }
     }
   }
