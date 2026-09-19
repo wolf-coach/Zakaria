@@ -244,6 +244,8 @@ main.page {
   align-items: center;
   gap: 25px;
   margin-top: 34px;
+  position: relative;
+  z-index: 10;
 }
 .video-link {
   display: flex;

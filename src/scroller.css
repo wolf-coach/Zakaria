@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Cherry+Bomb+One&family=Kavoon&display=swap');
+
+:root {
+  font-family: var(--main-font);
+  color: #151915;
+  background: #e7efd8;
+  line-height: 1.5;
+  font-synthesis: none;
+  --green: #a5df3f;
+  --dark: #0b0f0d;
+  --muted: #68706a;
+  --line: #dfe4de;
+  --main-font: "Poppins", sans-serif;
+  --logo-font: "Montserrat", sans-serif;
+  --brand-font: "Kavoon", serif;
+}
+
+.progress {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 5px;
+  border:1px solid red;
+  bottom: 100px;
+}
+
+.parallax-section {
+  margin: 100px 0;
+  
+}
+
+.parallax {
+  overflow: hidden;
+  letter-spacing: -2px;
+  line-height: 0.8;
+  margin: 0;
+  white-space: nowrap;
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+.parallax .scroller {
+  Font-family: 'Cherry Bomb One', cursive;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 64px;
+  display: flex;
+  white-space: nowrap;
+  display: flex;
+  flex-wrap: nowrap;
+  color: var(--dark);
+}
+
+.parallax span {
+  display: block;
+  margin-right: 30px;
+}

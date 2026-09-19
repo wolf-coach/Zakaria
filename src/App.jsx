@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence,
+  useScroll,
+  useSpring,
+  useTransform,
+  useMotionValue,
+  useVelocity,
+  useAnimationFrame } from "framer-motion";
+import { wrap } from "@motionone/utils";
 import {
   ArrowRight, Check, ChevronDown, Dumbbell, Flame, HeartPulse, Instagram, Package as PackageIcon,
   LayoutDashboard, LogIn, LogOut, Menu, Play, Plus, ShieldCheck, Star,
@@ -21,6 +28,67 @@ import { demoCustomer, demoCustomers, demoProgram } from "./data/demo";
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "admin@coachflow.demo";
 const days = Object.keys(demoProgram);
 const emptyProgram = Object.fromEntries(days.map(day => [day, { workout: "", exercises: [], meals: [] }]));
+
+
+function ParallaxText({ children, baseVelocity = 100 }) {
+  const baseX = useMotionValue(0);
+  const { scrollY } = useScroll();
+  const scrollVelocity = useVelocity(scrollY);
+  const smoothVelocity = useSpring(scrollVelocity, {
+    damping: 50,
+    stiffness: 400
+  });
+  const velocityFactor = useTransform(smoothVelocity, [0, 1000], [0, 5], {
+    clamp: false
+  });
+ 
+  /**
+   * This is a magic wrapping for the length of the text - you
+   * have to replace for wrapping that works for you or dynamically
+   * calculate
+   */
+  const x = useTransform(baseX, (v) => `${wrap(-20, -45, v)}%`);
+ 
+  const directionFactor = useRef(1);
+  useAnimationFrame((t, delta) => {
+    let moveBy = directionFactor.current * baseVelocity * (delta / 1000);
+ 
+    /**
+     * This is what changes the direction of the scroll once we
+     * switch scrolling directions.
+     */
+    if (velocityFactor.get() < 0) {
+      directionFactor.current = -1;
+    } else if (velocityFactor.get() > 0) {
+      directionFactor.current = 1;
+    }
+ 
+    moveBy += directionFactor.current * moveBy * velocityFactor.get();
+ 
+    baseX.set(baseX.get() + moveBy);
+  });
+ 
+  /**
+   * The number of times to repeat the child text should be dynamically calculated
+   * based on the size of the text and viewport. Likewise, the x motion value is
+   * currently wrapped between -20 and -45% - this 25% is derived from the fact
+   * we have four children (100% / 4). This would also want deriving from the
+   * dynamically generated number of children.
+   */
+  return (
+    <div className="parallax">
+      <motion.div className="scroller" style={{ x }}>
+        <span>{children} </span>
+        <span>{children} </span>
+        <span>{children} </span>
+        <span>{children} </span>
+      </motion.div>
+    </div>
+  );
+}
+ 
+
+ 
 
 // Firebase Realtime Database can return arrays as arrays or, depending on how
 // the data was edited, as objects. Normalize every day before rendering so a
@@ -401,6 +469,13 @@ function Home({ go }) {
     ["Sara B.", "I finally understand how to train and eat for my goal. Amazing coaching.", "5.0"],
     ["Walid R.", "The weekly dashboard keeps me accountable every single day.", "5.0"]
   ];
+
+
+
+  
+
+
+
   return <motion.main initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
     <section className="hero">
       <div className="hero-glow one" /><div className="hero-glow two" />
@@ -409,8 +484,28 @@ function Home({ go }) {
           <div className="eyebrow"><span className="pulse" /> PERSONAL COACHING • BUILT FOR RESULTS</div>
           <h1>Build the body.<br /><span>Build the life.</span></h1>
           <p className="hero-copy">Personalized training, nutrition and accountability — designed around your life, your body and your goals.</p>
-          <div className="hero-actions"><button className="primary-btn" onClick={() => go("login")}>Start your journey <ArrowRight size={18} /></button><a className="video-link" href="#about"><span className="play"><Play size={14} fill="currentColor" /></span> Discover coaching</a></div>
-          <div className="trust"><div className="avatars"><span>A</span><span>S</span><span>Y</span><span>+</span></div><div><strong>50+ clients</strong><small>already transforming</small></div></div>
+          <div className="hero-actions">
+            <button className="primary-btn" onClick={() => go("login")}>
+              Start your journey <ArrowRight size={18} />
+            </button>
+            <a className="video-link" href="#about">
+              <span className="play">
+                <Play size={14} fill="currentColor" />
+              </span> Discover coaching
+            </a>
+          </div>
+            <div className="trust">
+                <div className="avatars">
+                  <span>A</span>
+                  <span>S</span>
+                  <span>Y</span>
+                  <span>+</span>
+                </div>
+                <div>
+                    <strong>50+ clients</strong>
+                    <small>already transforming</small>
+                </div>
+            </div>
         </motion.div>
         <motion.div className="hero-card-wrap" initial={{ scale: .9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: .8, delay: .15 }}>
           <div className="hero-card">
@@ -460,7 +555,23 @@ function Home({ go }) {
     <section id="about" className="section about"><div className="container two-col">
       <Reveal><div className="section-label">01 — ABOUT THE COACH</div><h2>Coaching that fits <span>your life.</span></h2><p>I believe fitness should make your life better — not take it over. My coaching combines smart training, practical nutrition and real accountability to create results you can keep.</p><p>Every client gets a plan built around their current level, schedule, preferences and goal.</p><button className="text-btn">Meet your coach <ArrowRight size={17} /></button></Reveal>
       <Reveal delay={.15}><div className="about-card"><div className="about-icon"><Target /></div><h3>Personal. Measurable. Sustainable.</h3><div className="about-list"><span><Check />Individual training</span><span><Check />Personal nutrition</span><span><Check />Weekly accountability</span><span><Check />Progress adjustments</span></div></div></Reveal>
-    </div></section>
+    </div>
+      <section className="parallax-section">
+      <ParallaxText baseVelocity={5} >OMAR 🏋️ COACH 🧘‍♂️ PERSONEL🥇</ParallaxText>
+      </section>
+    </section>
+    
+
+
+
+        <section className="parallax-section">
+          <ParallaxText baseVelocity={-5}>ZAKARIA RAFALIA <i class="fa-solid fa-dumbbell"></i> COACH PERSONEL <i class="fa-solid fa-heart-pulse"></i></ParallaxText>
+        </section>
+
+
+
+
+
 
     <section className="section dark-section"><div className="container"><Reveal><div className="section-label">02 — WHAT I DO</div><h2>Everything you need to <span>move forward.</span></h2></Reveal><div className="service-grid">
       {[["01", "TRAINING", "Structured workouts built for your goal, experience and available equipment.", Dumbbell], ["02", "NUTRITION", "Simple meal guidance and personalized plans you can actually follow.", Utensils], ["03", "ACCOUNTABILITY", "Regular check-ins, adjustments and direct support when you need it.", HeartPulse]].map(([n, t, d, I], i) => <Reveal delay={i * .1} key={n}><div className="service-card"><span>{n}</span><I /><h3>{t}</h3><p>{d}</p></div></Reveal>)}
