@@ -602,7 +602,7 @@ function Home({ go }) {
     </div>
     
         <section className="parallax-section">
-          <ParallaxText baseVelocity={-5}>ZAKARIA RAFALIA <i class="fa-solid fa-dumbbell"></i> COACH PERSONEL <i class="fa-solid fa-heart-pulse"></i></ParallaxText>
+          <ParallaxText baseVelocity={-5}>ZAKARIA RAFALIA 🥇 COACH PERSONEL 🏋️</ParallaxText>
         </section>
     </section>
     
