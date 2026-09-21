@@ -659,12 +659,12 @@ main.page {
 }
 button.mini-add {
   background-color: #2cf591;
-  font-size: 12px;
-  font-weight: 600;
-  color: #636363;
-  padding: 6px 9px;
-  margin: 12px;
-  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1a3a1a;
+  padding: 6px 10px;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 .panel {
   background: #fff;
@@ -696,13 +696,42 @@ button.mini-add {
 .repeat-row {
   display: flex;
   align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
+}
+.repeat-row input {
+  flex: 1;
+}
+.remove-item {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #f1f3ef;
+  color: #8a938c;
+  font-size: 16px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.remove-item:hover {
+  background: #fbe6e6;
+  color: #b13a3a;
+}
+.program-field-group {
+  margin-top: 14px;
+}
+.field-empty {
+  font-size: 11px;
+  color: #9aa39c;
+  padding: 10px 0 4px;
 }
 
 .field-group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 8px;
 }
 .day-tabs button {
   padding: 10px 4px;
@@ -721,6 +750,21 @@ button.mini-add {
   background: #172018;
   color: var(--green);
   box-shadow: 0 4px 12px #00012;
+}
+.admin-day-tabs button {
+  position: relative;
+}
+.admin-day-tabs .day-dot {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #a5df3f;
+}
+.admin-day-tabs button.active .day-dot {
+  background: var(--green);
 }
 .program-heading {
   display: flex;
@@ -913,30 +957,46 @@ select::picker(select) {
   background: #111612;
   color: var(--green);
 }
-.admin-grid {
+/* ---- Admin: mobile-app style layout ---- */
+.admin-app-grid {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 320px 1fr;
   gap: 18px;
+  align-items: start;
+}
+.customer-pane {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  overflow: hidden;
 }
 .customer-list {
   display: grid;
   gap: 8px;
   align-content: start;
+  padding: 10px;
+  max-height: 640px;
+  overflow-y: auto;
 }
 .customer-list button {
   background: #fff;
   border: 1px solid var(--line);
-  padding: 13px;
-  border-radius: 13px;
+  padding: 12px;
+  border-radius: 15px;
   display: grid;
-  grid-template-columns: 35px 1fr 16px;
+  grid-template-columns: 42px 1fr 16px;
   align-items: center;
   text-align: left;
-  gap: 10px;
+  gap: 11px;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.customer-list button:active {
+  box-shadow: inset 0 0 0 1px #cfe4ab;
 }
 .customer-list button.selected {
   border-color: #9fcf40;
   background: #f4f8ec;
+  box-shadow: 0 6px 16px rgba(110, 151, 43, .12);
 }
 .customer-avatar {
   width: 35px;
@@ -947,27 +1007,200 @@ select::picker(select) {
   place-items: center;
   font-weight: 900;
   color: #6c9428;
+  flex-shrink: 0;
 }
-.customer-list b,
+.customer-list .customer-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 15px;
+}
+.customer-avatar.big {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  font-size: 17px;
+}
+.customer-card-body {
+  min-width: 0;
+}
+.customer-card-body b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .customer-list small {
   display: block;
-}
-.customer-list small {
   font-size: 9px;
   color: #88918a;
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.customer-list svg {
+.customer-list svg.chevron {
   color: #a0a8a1;
+  justify-self: end;
+}
+.customer-card-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.status-chip {
+  font-style: normal;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  padding: 3px 7px;
+  border-radius: 20px;
+  background: #eef1ec;
+  color: #6a736c;
+}
+.status-chip.active {
+  background: #e9f7d6;
+  color: #5c8a1c;
+}
+.status-chip.expiring {
+  background: #fdf0d6;
+  color: #a06a10;
+}
+.status-chip.expired {
+  background: #fbe6e6;
+  color: #b13a3a;
+}
+.status-chip.pending {
+  background: #eaf1fb;
+  color: #3d6fad;
+}
+.package-chip {
+  font-style: normal;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 20px;
+  background: #f2f4f0;
+  color: #838d86;
+}
+.mini-progress {
+  display: block;
+  height: 4px;
+  border-radius: 4px;
+  background: #eef1ec;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.mini-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #a5df3f, #6c9428);
+  border-radius: 4px;
+}
+.customer-detail-pane {
+  min-width: 0;
+}
+.detail-empty {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 300px;
+  color: #8b948d;
+}
+.back-btn {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #f1f3ef;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #313931;
 }
 .editor-title {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
-.editor-title h2 {
-  margin: 5px 0;
+.editor-title-text {
+  flex: 1;
+  min-width: 0;
+}
+.editor-title-text h2 {
+  margin: 3px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-subtabs {
+  display: flex;
+  gap: 6px;
+  background: #f1f3ef;
+  padding: 5px;
+  border-radius: 12px;
+  margin-bottom: 22px;
+}
+.detail-subtabs button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 6px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #6b746e;
+}
+.detail-subtabs button.active {
+  background: #fff;
+  color: #23291f;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .07);
+}
+.package-select-label {
+  display: grid;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  margin-bottom: 14px;
+}
+.customer-notification-box.no-border {
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: none;
+}
+.admin-bottom-nav {
+  display: none;
+}
+.program-save-bar {
+  margin-top: 22px;
+}
+.meals-group {
+  background: #f8fbf3;
+  border: 1px solid #e4eed6;
+  border-radius: 13px;
+  padding: 14px;
+  margin-top: 14px;
+}
+.meals-group .field-group-head span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #4c6b1f;
+  font-weight: 800;
+  font-size: 12px;
+}
+.program-field-group .field-group-head span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .status {
   font-size: 9px;
@@ -999,6 +1232,24 @@ select::picker(select) {
   grid-template-columns: 150px 1fr 1fr 1fr;
   gap: 12px;
   align-items: end;
+}
+/* The admin program builder now shows one day at a time, like a mobile
+   app's day switcher, so its card stacks full-width instead of the
+   dense 4-column row used by the old all-days list. */
+.day-editor.mobile-day-editor {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 16px;
+  padding: 20px;
+}
+.mobile-day-editor .day-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mobile-day-editor .day-title b {
+  font-size: 18px;
 }
 .day-title {
   align-self: center;
@@ -1184,7 +1435,7 @@ footer {
   }
   .two-col,
   .dashboard-grid,
-  .admin-grid {
+  .admin-app-grid {
     display: grid;
     grid-template-columns: 1fr;
   }
@@ -1364,6 +1615,101 @@ footer {
   .nav-links .outline-btn {
     justify-content: center;
     text-align: center;
+  }
+
+  /* ---- Admin dashboard: mobile-app navigation ---- */
+  .page.admin-app {
+    padding-bottom: 90px;
+  }
+  .admin-app .admin-tabs {
+    display: none;
+  }
+  .admin-app-grid {
+    gap: 0;
+  }
+  .admin-app-grid.mobile-showing-list .customer-detail-pane,
+  .admin-app-grid.mobile-showing-detail .customer-pane {
+    display: none;
+  }
+  .customer-pane {
+    border-radius: 16px;
+  }
+  .customer-list {
+    max-height: none;
+  }
+  .back-btn {
+    display: flex;
+  }
+  .customer-detail-pane .panel {
+    padding: 18px;
+    border-radius: 16px;
+  }
+  .detail-subtabs {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .admin-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 14px;
+    background: #111612;
+    border-radius: 18px;
+    padding: 8px;
+    gap: 6px;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, .3);
+    z-index: 60;
+  }
+  .admin-bottom-nav button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    border-radius: 13px;
+    color: #8b968e;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .admin-bottom-nav button.active {
+    background: #1b221c;
+    color: var(--green);
+  }
+  .program-admin {
+    padding: 18px 16px 90px;
+  }
+  .admin-day-tabs {
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+    background: #f1f3ef;
+    border-radius: 12px;
+    padding: 5px;
+    margin: 18px 0;
+  }
+  .admin-day-tabs button {
+    min-width: 0;
+    width: 100%;
+    padding: 9px 2px;
+    font-size: 10px;
+  }
+  .admin-day-tabs button small {
+    display: none;
+  }
+  .program-save-bar {
+    position: sticky;
+    bottom: 8px;
+    background: linear-gradient(to top, #fff 65%, transparent);
+    padding-top: 14px;
+    margin-top: 6px;
+  }
+  .program-save-bar .primary-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 
@@ -1884,3 +2230,522 @@ footer {
 }
 .customer-notification-box input:focus,
 .customer-notification-box textarea:focus { border-color: #9fcf40; }
+
+
+/* How it works — mobile-first customer onboarding */
+.how-it-works {
+  overflow: hidden;
+}
+.how-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.how-heading h2 {
+  margin-bottom: 10px;
+  max-width: 720px;
+}
+.how-heading p {
+  max-width: 650px;
+  margin: 0;
+  color: var(--muted, #8f96a3);
+  line-height: 1.7;
+}
+.how-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 999px;
+  background: rgba(255,255,255,.035);
+  font-size: 13px;
+  font-weight: 700;
+}
+.how-slider-shell {
+  position: relative;
+}
+.how-swiper {
+  overflow: visible;
+  padding: 4px 2px 12px;
+}
+.how-swiper .swiper-slide {
+  height: auto;
+}
+.how-card {
+  height: 100%;
+  min-height: 245px;
+  padding: 24px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255,255,255,.065), rgba(255,255,255,.025));
+  box-shadow: 0 18px 50px rgba(0,0,0,.12);
+}
+.how-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+.how-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: rgba(255,255,255,.07);
+}
+.how-number {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  opacity: .45;
+}
+.how-card h3 {
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+.how-card p {
+  margin: 0;
+  color: var(--muted, #8f96a3);
+  line-height: 1.65;
+  font-size: 14px;
+}
+.how-line {
+  height: 2px;
+  margin-top: 25px;
+  background: rgba(255,255,255,.07);
+  overflow: hidden;
+  border-radius: 2px;
+}
+.how-line span {
+  display: block;
+  width: 34%;
+  height: 100%;
+  background: currentColor;
+}
+.how-swipe-hint {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: .5;
+}
+
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(5,7,10,.74);
+  backdrop-filter: blur(10px);
+}
+.welcome-popup {
+  position: relative;
+  width: min(100%, 470px);
+  padding: 30px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 28px;
+  background: var(--card, #11151b);
+  box-shadow: 0 30px 90px rgba(0,0,0,.38);
+}
+.welcome-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.06);
+  color: inherit;
+  cursor: pointer;
+}
+.welcome-icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 22px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.08);
+}
+.welcome-popup h2 {
+  margin: 8px 35px 12px 0;
+  font-size: clamp(27px, 6vw, 38px);
+  line-height: 1.05;
+}
+.welcome-popup h2 span {
+  opacity: .62;
+}
+.welcome-popup > p {
+  margin: 0 0 22px;
+  color: var(--muted, #8f96a3);
+  line-height: 1.65;
+}
+.welcome-points {
+  display: grid;
+  gap: 11px;
+  margin-bottom: 25px;
+}
+.welcome-points div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+.welcome-points svg {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 700px) {
+  .how-heading {
+    display: block;
+  }
+  .how-badge {
+    margin-top: 16px;
+  }
+  .how-swiper {
+    margin-right: -18px;
+    padding-right: 18px;
+  }
+  .how-swipe-hint {
+    display: flex;
+  }
+  .how-card {
+    min-height: 225px;
+    padding: 21px;
+    border-radius: 21px;
+  }
+  .welcome-popup {
+    padding: 26px 20px 20px;
+    border-radius: 24px;
+  }
+}
+
+/* ---- Admin customer browser: app-like navigation ---- */
+.customer-browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: -4px 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.browser-crumb {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #8a938c;
+  font-size: 11px;
+  overflow: hidden;
+}
+.browser-crumb span,
+.browser-crumb b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser-crumb b { color: #242b25; }
+.browser-actions { display: flex; gap: 5px; }
+.browser-actions button {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #f1f3ef;
+  color: #3b433d;
+}
+.browser-actions button:disabled { opacity: .35; }
+@media (max-width: 760px) {
+  .customer-browser-bar {
+    position: sticky;
+    top: -1px;
+    z-index: 5;
+    margin: -18px -18px 16px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,.94);
+    backdrop-filter: blur(12px);
+  }
+  .customer-browser-bar .back-btn { display: flex; }
+  .browser-crumb { font-size: 10px; }
+  .browser-actions button { width: 34px; height: 34px; }
+}
+
+/* ---- Customer dashboard: in-page mobile app browser ---- */
+.customer-page-browser {
+  position: sticky;
+  top: 10px;
+  z-index: 20;
+  display: flex;
+  gap: 7px;
+  padding: 7px;
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgba(20,28,22,.08);
+}
+.customer-page-browser button {
+  position: relative;
+  flex: 1;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #737b74;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease;
+}
+.customer-page-browser button.active {
+  background: #202720;
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(20,28,22,.15);
+}
+.customer-page-browser button b {
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8eee9;
+  color: #273029;
+  font-size: 10px;
+}
+.customer-page-browser button.active b { background: rgba(255,255,255,.18); color: #fff; }
+.customer-browser-view { min-height: 420px; }
+.customer-notifications-page-list { display: grid; gap: 8px; }
+.notification-count-pill {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 9px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef1ed;
+  font-size: 12px;
+  font-weight: 800;
+}
+.customer-notifications-page { min-height: 420px; }
+
+@media (max-width: 700px) {
+  .customer-page-browser {
+    top: 5px;
+    margin: 0 -2px 14px;
+    border-radius: 15px;
+  }
+  .customer-page-browser button {
+    min-height: 46px;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 10px;
+    border-radius: 10px;
+  }
+  .customer-page-browser button b {
+    position: absolute;
+    top: 3px;
+    right: 9px;
+    min-width: 16px;
+    height: 16px;
+    font-size: 9px;
+  }
+  .customer-browser-view { min-height: 500px; }
+  .customer-notifications-page { padding: 17px 14px; }
+}
+
+/* ---- Customer app navigation: fixed bottom mobile-app bar ---- */
+.customer-page-browser {
+  position: fixed;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  top: auto;
+  z-index: 1000;
+  width: min(620px, calc(100vw - 28px));
+  margin: 0;
+  padding: 7px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(220, 226, 221, .95);
+  border-radius: 22px;
+  background: rgba(255,255,255,.94);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 16px 45px rgba(20,28,22,.16), 0 3px 12px rgba(20,28,22,.08);
+}
+
+.customer-page-browser button {
+  min-height: 50px;
+  border-radius: 16px;
+}
+
+.customer-page-browser button.active {
+  transform: translateY(-1px);
+}
+
+/* Keep dashboard content above the floating navigation. */
+.page:has(.customer-page-browser) .container {
+  padding-bottom: 108px;
+}
+
+@media (max-width: 700px) {
+  .customer-page-browser {
+    width: calc(100vw - 20px);
+    bottom: max(8px, env(safe-area-inset-bottom));
+    padding: 6px;
+    border-radius: 21px;
+  }
+
+  .customer-page-browser button {
+    min-height: 52px;
+    border-radius: 15px;
+  }
+
+  .page:has(.customer-page-browser) .container {
+    padding-bottom: 104px;
+  }
+}
+
+/* ---- Admin app: fixed bottom navigation matching the customer mobile app ---- */
+@media (max-width: 700px) {
+  .admin-bottom-nav {
+    left: 50%;
+    right: auto;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: calc(100vw - 20px);
+    transform: translateX(-50%);
+    padding: 6px;
+    gap: 4px;
+    border: 1px solid rgba(220, 226, 221, .95);
+    border-radius: 21px;
+    background: rgba(255,255,255,.94);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    box-shadow: 0 16px 45px rgba(20,28,22,.16), 0 3px 12px rgba(20,28,22,.08);
+    z-index: 1000;
+  }
+
+  .admin-bottom-nav button {
+    min-height: 52px;
+    padding: 7px 4px;
+    border-radius: 15px;
+    color: #7d887f;
+    transition: transform .2s ease, background .2s ease, color .2s ease;
+  }
+
+  .admin-bottom-nav button svg {
+    transition: transform .2s ease;
+  }
+
+  .admin-bottom-nav button.active {
+    background: #f0f6e9;
+    color: var(--green);
+    box-shadow: 0 5px 16px rgba(70, 100, 35, .08);
+  }
+
+  .admin-bottom-nav button.active svg {
+    transform: translateY(-1px) scale(1.04);
+  }
+
+  .page.admin-app {
+    padding-bottom: 108px;
+  }
+
+  .program-admin {
+    padding-bottom: 18px;
+  }
+}
+
+/* ---- Admin customer cards: two-column app grid ---- */
+@media (max-width: 700px) {
+  .customer-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .customer-list button {
+    min-width: 0;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 17px;
+    align-items: start;
+  }
+
+  .customer-list .customer-avatar {
+    grid-column: 1 / -1;
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+  }
+
+  .customer-card-body {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .customer-card-body b {
+    font-size: 14px;
+  }
+
+  .customer-list small {
+    font-size: 9px;
+  }
+
+  .customer-list svg.chevron {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
+  .customer-list button {
+    position: relative;
+  }
+
+  .customer-card-meta {
+    gap: 5px;
+  }
+
+  .status-chip,
+  .package-chip {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mini-progress {
+    margin-top: 8px;
+  }
+}
+
+@media (min-width: 701px) {
+  .customer-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-list button {
+    min-width: 0;
+  }
+}

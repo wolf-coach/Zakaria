@@ -8,8 +8,8 @@ import { motion, AnimatePresence,
   useAnimationFrame } from "framer-motion";
 import { wrap } from "@motionone/utils";
 import {
-  ArrowRight, Bell, Check, ChevronDown, Dumbbell, Flame, HeartPulse, Instagram, Package as PackageIcon, Trash2,
-  LayoutDashboard, LogIn, LogOut, Menu, Play, Plus, ShieldCheck, Star,
+  ArrowRight, ArrowLeft, Bell, Check, ChevronDown, ChevronRight, Dumbbell, Flame, HeartPulse, Instagram, Package as PackageIcon, Trash2,
+  LayoutDashboard, LogIn, LogOut, Menu, Play, Plus, ShieldCheck, Star, Search,
   Target, User, Users, Utensils, X, CalendarDays, Clock3, Save, CheckCircle2, AlertTriangle, Send, Phone
 } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react"; 
@@ -183,6 +183,7 @@ function App() {
   const [program, setProgram] = useState(demoProgram);
   const [authMode, setAuthMode] = useState(null);
   const [toast, setToast] = useState("");
+  const [welcomePopup, setWelcomePopup] = useState(false);
   const authFlowRef = useRef(null);
 
   const notify = (msg) => {
@@ -343,6 +344,7 @@ function App() {
           };
           await set(profileRef, profile);
           setCustomer(profile);
+          setWelcomePopup(true);
         } else {
           // Existing customer: load their own UID document. If it does not
           // exist, create a minimal profile without demo data.
@@ -380,6 +382,7 @@ function App() {
       setCustomers(prev => prev.some(x => x.email?.toLowerCase() === email) ? prev : [...prev, profile]);
       setAuthMode(null);
       go("dashboard");
+      if (mode === "signup") setWelcomePopup(true);
       notify(mode === "signup" ? "Account created successfully." : "Welcome back.");
     } catch (e) {
       authFlowRef.current = null;
@@ -465,6 +468,31 @@ function App() {
         {authMode && <AuthOverlay mode={authMode} close={() => setAuthMode(null)} onSubmit={(f) => handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthMode(authMode === "login" ? "signup" : "login")} />}
       </AnimatePresence>
       <AnimatePresence>{toast && <Toast message={toast} />}</AnimatePresence>
+      <AnimatePresence>
+        {welcomePopup && (
+          <motion.div className="welcome-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div
+              className="welcome-popup"
+              initial={{ opacity: 0, y: 28, scale: .96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: .97 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            >
+              <button className="welcome-close" aria-label="Close welcome message" onClick={() => setWelcomePopup(false)}><X size={19} /></button>
+              <div className="welcome-icon"><Dumbbell size={26} /></div>
+              <div className="section-label">WELCOME TO COACHRAFALIA</div>
+              <h2>Welcome to your <span>new fitness journey.</span></h2>
+              <p>Your account is ready. Your dashboard is where you'll find your workouts, meals, progress and coaching updates.</p>
+              <div className="welcome-points">
+                <div><Check size={17} /><span>Personalized weekly program</span></div>
+                <div><Check size={17} /><span>Progress tracking in one place</span></div>
+                <div><Check size={17} /><span>Updates from your coach</span></div>
+              </div>
+              <button className="primary-btn full" onClick={() => setWelcomePopup(false)}>Let's get started <ArrowRight size={17} /></button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <Footer />
     </div>
   );
@@ -596,6 +624,66 @@ function Home({ go }) {
       </div>
     </section>
 
+    <section id="how-it-works" className="section how-it-works">
+      <div className="container">
+        <Reveal>
+          <div className="section-label">02 — HOW THE APP WORKS</div>
+          <div className="how-heading">
+            <div>
+              <h2>Your coaching journey, <span>all in one place.</span></h2>
+              <p>Everything you need to train, track your progress and stay connected with your coach — designed for your phone.</p>
+            </div>
+            <div className="how-badge"><Dumbbell size={18} /> Mobile-first coaching</div>
+          </div>
+        </Reveal>
+
+        <motion.div
+          className="how-slider-shell"
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: .15 }}
+          transition={{ duration: .55 }}
+        >
+          <Swiper
+            className="how-swiper"
+            spaceBetween={16}
+            slidesPerView={1.08}
+            breakpoints={{
+              640: { slidesPerView: 2 },
+              980: { slidesPerView: 3 }
+            }}
+            navigation
+            modules={[Navigation]}
+          >
+            {[
+              { icon: <User size={22} />, number: "01", title: "Create your account", text: "Choose your coaching package and tell us about your goals. Your personal dashboard is created automatically." },
+              { icon: <CalendarDays size={22} />, number: "02", title: "Follow your plan", text: "Open your dashboard to see workouts, meals and your weekly program from your coach." },
+              { icon: <Target size={22} />, number: "03", title: "Track your progress", text: "Keep your weight, measurements, photos and weekly progress organized in one place." },
+              { icon: <Bell size={22} />, number: "04", title: "Stay updated", text: "Receive important updates from your coach and keep up with your training schedule." }
+            ].map((step) => (
+              <SwiperSlide key={step.number}>
+                <motion.article
+                  className="how-card"
+                  whileHover={{ y: -6 }}
+                  whileTap={{ scale: .98 }}
+                  transition={{ type: "spring", stiffness: 320, damping: 22 }}
+                >
+                  <div className="how-card-top">
+                    <span className="how-icon">{step.icon}</span>
+                    <span className="how-number">{step.number}</span>
+                  </div>
+                  <h3>{step.title}</h3>
+                  <p>{step.text}</p>
+                  <div className="how-line"><span /></div>
+                </motion.article>
+              </SwiperSlide>
+            ))}
+          </Swiper>
+          <div className="how-swipe-hint"><ArrowLeft size={15} /> Swipe to explore <ArrowRight size={15} /></div>
+        </motion.div>
+      </div>
+    </section>
+
     <section id="about" className="section about"><div className="container two-col">
       <Reveal><div className="section-label">01 — ABOUT THE COACH</div><h2>Coaching that fits <span>your life.</span></h2><p>I believe fitness should make your life better — not take it over. My coaching combines smart training, practical nutrition and real accountability to create results you can keep.</p><p>Every client gets a plan built around their current level, schedule, preferences and goal.</p><button className="text-btn">Meet your coach <ArrowRight size={17} /></button></Reveal>
       <Reveal delay={.15}><div className="about-card"><div className="about-icon"><Target /></div><h3>Personal. Measurable. Sustainable.</h3><div className="about-list"><span><Check />Individual training</span><span><Check />Personal nutrition</span><span><Check />Weekly accountability</span><span><Check />Progress adjustments</span></div></div></Reveal>
@@ -628,6 +716,7 @@ function Home({ go }) {
 
 function Dashboard({ customer, program, go }) {
   const [selected, setSelected] = useState("Monday");
+  const [activeSection, setActiveSection] = useState("home");
   const [notifications, setNotifications] = useState([]);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const notificationRef = useRef(null);
@@ -675,13 +764,29 @@ function Dashboard({ customer, program, go }) {
       setNotifications(current => current.filter(notification => notification.id !== id));
       return;
     }
-    try {
-      await remove(ref(db, `notifications/${auth.currentUser.uid}/${id}`));
-    } catch (e) {
-      console.error("Could not delete notification", e);
-    }
+    try { await remove(ref(db, `notifications/${auth.currentUser.uid}/${id}`)); }
+    catch (e) { console.error("Could not delete notification", e); }
   };
-  const section = (id) => { close(); if (page !== "home") { go("home"); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 100); } else document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); };
+
+  const openSection = (section) => {
+    setActiveSection(section);
+    setNotificationOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const renderNotifications = (compact = false) => (
+    <div className={compact ? "notification-list" : "customer-notification-page-list"}>
+      {visibleNotifications.length === 0 ? (
+        <div className="notification-empty"><Bell size={22} /><p>No new notifications.</p></div>
+      ) : visibleNotifications.slice(0, compact ? 8 : 30).map(n => (
+        <motion.div key={n.id} className={`notification-item ${n.read ? "read" : ""}`} onClick={() => markRead(n.id)} whileHover={{ x: 3 }} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") markRead(n.id); }}>
+          <span className="notification-icon"><Bell size={15} /></span>
+          <span className="notification-copy"><b>{n.title}</b><small>{n.message}</small><em>{n.createdAt && !n.system ? new Date(Number(n.createdAt)).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }) : "Now"}</em></span>
+          {!n.system && <button type="button" className="notification-delete" onClick={event => { event.stopPropagation(); deleteNotification(n.id); }} aria-label={`Delete notification: ${n.title}`} title="Delete notification"><Trash2 size={15} /></button>}
+        </motion.div>
+      ))}
+    </div>
+  );
 
   return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
     <div className="container">
@@ -695,43 +800,54 @@ function Dashboard({ customer, program, go }) {
             <AnimatePresence>
               {notificationOpen && <motion.div className="notification-panel" initial={{ opacity: 0, y: -10, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: .97 }} transition={{ type: "spring", stiffness: 420, damping: 28 }}>
                 <div className="notification-head"><div><span className="section-label">INBOX</span><h3>Notifications</h3></div><div className="notification-head-actions"><span>{visibleNotifications.length}</span><button type="button" className="notification-close" onClick={() => setNotificationOpen(false)} aria-label="Close notifications"><X size={16} /></button></div></div>
-                {visibleNotifications.length === 0 ? <div className="notification-empty"><Bell size={20} /><p>No new notifications.</p></div> : <div className="notification-list">
-                  {visibleNotifications.slice(0, 8).map(n => <motion.div key={n.id} className={`notification-item ${n.read ? "read" : ""}`} onClick={() => markRead(n.id)} whileHover={{ x: 3 }} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") markRead(n.id); }}>
-                    <span className="notification-icon"><Bell size={15} /></span><span className="notification-copy"><b>{n.title}</b><small>{n.message}</small><em>{n.createdAt && !n.system ? new Date(Number(n.createdAt)).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }) : "Now"}</em></span>
-                    {!n.system && <button type="button" className="notification-delete" onClick={event => { event.stopPropagation(); deleteNotification(n.id); }} aria-label={`Delete notification: ${n.title}`} title="Delete notification"><Trash2 size={15} /></button>}
-                  </motion.div>)}
-                </div>}
+                {renderNotifications(true)}
               </motion.div>}
             </AnimatePresence>
           </div>
-
           <button className="outline-dark" onClick={() => go("profile")}><User size={17} /> My profile</button>
         </div>
       </div>
 
-      <div className="dash-stats">
-        <Stat icon={Target} label="Goal" value={customer.goal || "Not set"} />
-        <Stat icon={Flame} label="Current weight" value={customer.weight ? `${customer.weight} kg` : "Not set"} />
-        <Stat icon={Clock3} label="Plan remaining" value={progress.remaining === null ? "Awaiting admin" : `${progress.remaining} days`} />
-        <Stat icon={ShieldCheck} label="Package" value={customer.package || "Not assigned"} />
-      </div>
+      <nav className="customer-page-browser" aria-label="Customer dashboard sections">
+        {[{ id: "home", label: "Home", icon: LayoutDashboard }, { id: "workout", label: "Workout", icon: Dumbbell }, { id: "notifications", label: "Notifications", icon: Bell }].map(item => {
+          const Icon = item.icon;
+          return <motion.button key={item.id} className={activeSection === item.id ? "active" : ""} onClick={() => openSection(item.id)} whileTap={{ scale: .96 }}>
+            <Icon size={17} /> <span>{item.label}</span>{item.id === "notifications" && unreadCount > 0 && <b>{unreadCount > 9 ? "9+" : unreadCount}</b>}
+          </motion.button>;
+        })}
+      </nav>
 
-      <section className="package-progress-card panel">
-        <div className="package-progress-top"><div><span className="section-label">YOUR PACKAGE</span><h2>{customer.package || "Package not assigned"}</h2></div><span className={`package-status ${progress.awaiting ? "pending" : progress.active ? "active" : "expired"}`}>{progress.awaiting ? "AWAITING ADMIN" : progress.active ? "ACTIVE" : "EXPIRED"}</span></div>
-        {progress.awaiting ? <div className="package-awaiting"><AlertTriangle size={19} /><div><b>Dates are waiting for admin confirmation.</b><p>Your coach needs to confirm your package start date. Your package end date will then be calculated automatically.</p></div></div> : <>
-          <div className="package-dates"><span><small>START DATE</small><b>{formatDate(customer.startDate)}</b></span><span><small>END DATE</small><b>{formatDate(customer.endDate)}</b></span><span><small>TIME</small><b>{getPackageDurationLabel(customer.package)}</b></span><span><small>REMAINING</small><b>{progress.remaining} day{progress.remaining === 1 ? "" : "s"}</b></span></div>
-          <div className="progress-track"><motion.div className="progress-fill" initial={{ width: 0 }} animate={{ width: `${progress.percent}%` }} transition={{ duration: 1.1, type: "spring", stiffness: 70, damping: 18 }} /></div>
-          <div className="progress-meta"><span>{progress.percent}% remaining</span><span>{progress.remaining === 0 ? "Package ended" : `${progress.remaining} days left`}</span></div>
-        </>}
-      </section>
+      <AnimatePresence mode="wait">
+        {activeSection === "home" && <motion.section key="customer-home" className="customer-browser-view" initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 18 }} transition={{ duration: .2 }}>
+          <div className="dash-stats">
+            <Stat icon={Target} label="Goal" value={customer.goal || "Not set"} />
+            <Stat icon={Flame} label="Current weight" value={customer.weight ? `${customer.weight} kg` : "Not set"} />
+            <Stat icon={Clock3} label="Plan remaining" value={progress.remaining === null ? "Awaiting admin" : `${progress.remaining} days`} />
+            <Stat icon={ShieldCheck} label="Package" value={customer.package || "Not assigned"} />
+          </div>
+          <section className="package-progress-card panel">
+            <div className="package-progress-top"><div><span className="section-label">YOUR PACKAGE</span><h2>{customer.package || "Package not assigned"}</h2></div><span className={`package-status ${progress.awaiting ? "pending" : progress.active ? "active" : "expired"}`}>{progress.awaiting ? "AWAITING ADMIN" : progress.active ? "ACTIVE" : "EXPIRED"}</span></div>
+            {progress.awaiting ? <div className="package-awaiting"><AlertTriangle size={19} /><div><b>Dates are waiting for admin confirmation.</b><p>Your coach needs to confirm your package start date. Your package end date will then be calculated automatically.</p></div></div> : <>
+              <div className="package-dates"><span><small>START DATE</small><b>{formatDate(customer.startDate)}</b></span><span><small>END DATE</small><b>{formatDate(customer.endDate)}</b></span><span><small>TIME</small><b>{getPackageDurationLabel(customer.package)}</b></span><span><small>REMAINING</small><b>{progress.remaining} day{progress.remaining === 1 ? "" : "s"}</b></span></div>
+              <div className="progress-track"><motion.div className="progress-fill" initial={{ width: 0 }} animate={{ width: `${progress.percent}%` }} transition={{ duration: 1.1, type: "spring", stiffness: 70, damping: 18 }} /></div>
+              <div className="progress-meta"><span>{progress.percent}% remaining</span><span>{progress.remaining === 0 ? "Package ended" : `${progress.remaining} days left`}</span></div>
+            </>}
+          </section>
+          <aside className="panel coach-note"><div className="coach-avatar">C</div><div className="section-label">COACH NOTE</div><h3>Consistency beats perfection.</h3><p>Focus on completing today's plan. If something doesn't feel right, message your coach and we'll adjust it.</p><div className="note-line"><Check /> Personalized for you</div><div className="note-line"><Check /> Weekly adjustments</div></aside>
+        </motion.section>}
 
-      <div className="dashboard-grid">
-        <section className="panel week-panel"><div className="panel-title"><div><span className="section-label">THIS WEEK</span><h2>Your program</h2></div><CalendarDays /></div><div className="day-tabs">{days.map(day => <button className={selected === day ? "active" : ""} onClick={() => setSelected(day)} key={day}>{day.slice(0, 3)}<small>{day}</small></button>)}</div><AnimatePresence mode="wait"><motion.div key={selected} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="program-content"><div className="program-heading"><div className="day-icon"><Dumbbell /></div><div><small>{selected}</small><h3>{d.workout || "Your workout will appear here."}</h3></div></div><h4>Workout</h4>{d.exercises.map((x, i) => <div className="exercise" key={`${x}-${i}`}><span>{String(i + 1).padStart(2, "0")}</span><b>{x}</b><Check size={16} /></div>)}<h4>Meals</h4><div className="meal-list">{d.meals.map((x, i) => <div key={`${x}-${i}`}><Utensils size={16} /><span>{x}</span></div>)}</div></motion.div></AnimatePresence></section>
-        <aside className="panel coach-note"><div className="coach-avatar">C</div><div className="section-label">COACH NOTE</div><h3>Consistency beats perfection.</h3><p>Focus on completing today's plan. If something doesn't feel right, message your coach and we'll adjust it.</p><div className="note-line"><Check /> Personalized for you</div><div className="note-line"><Check /> Weekly adjustments</div></aside>
-      </div>
+        {activeSection === "workout" && <motion.section key="customer-workout" className="customer-browser-view" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .2 }}>
+          <section className="panel week-panel"><div className="panel-title"><div><span className="section-label">THIS WEEK</span><h2>Your program</h2></div><CalendarDays /></div><div className="day-tabs">{days.map(day => <button className={selected === day ? "active" : ""} onClick={() => setSelected(day)} key={day}>{day.slice(0, 3)}<small>{day}</small></button>)}</div><AnimatePresence mode="wait"><motion.div key={selected} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="program-content"><div className="program-heading"><div className="day-icon"><Dumbbell /></div><div><small>{selected}</small><h3>{d.workout || "Your workout will appear here."}</h3></div></div><h4>Workout</h4>{d.exercises.map((x, i) => <div className="exercise" key={`${x}-${i}`}><span>{String(i + 1).padStart(2, "0")}</span><b>{x}</b><Check size={16} /></div>)}<h4>Meals</h4><div className="meal-list">{d.meals.map((x, i) => <div key={`${x}-${i}`}><Utensils size={16} /><span>{x}</span></div>)}</div></motion.div></AnimatePresence></section>
+        </motion.section>}
+
+        {activeSection === "notifications" && <motion.section key="customer-notifications" className="customer-browser-view" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .2 }}>
+          <section className="panel customer-notifications-page"><div className="panel-title"><div><span className="section-label">INBOX</span><h2>Your notifications</h2></div><span className="notification-count-pill">{visibleNotifications.length}</span></div>{renderNotifications(false)}</section>
+        </motion.section>}
+      </AnimatePresence>
     </div>
   </motion.main>
 }
+
 function Stat({ icon: Icon, label, value }) { return <div className="stat-card"><div className="stat-icon"><Icon size={18} /></div><small>{label}</small><b>{value}</b></div> }
 
 function Profile({ customer, setCustomer, notify, go }) {
@@ -776,6 +892,12 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   const programBeforeEditRef = useRef(emptyProgram);
   const [search, setSearch] = useState("");
   const [startDateDraft, setStartDateDraft] = useState("");
+  // Mobile-app style navigation: which pane shows on a phone-width screen,
+  // which sub-tab of a customer's profile is open, and which day of the
+  // weekly program/meal builder is currently focused.
+  const [mobileView, setMobileView] = useState("list");
+  const [detailTab, setDetailTab] = useState("info");
+  const [activeDay, setActiveDay] = useState(days[0]);
 
   useEffect(() => {
     if (!firebaseConfigured || !db || !auth?.currentUser) {
@@ -834,6 +956,17 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   const expiringCount = customers.filter(c => { const p = packageProgress(c.startDate, c.endDate); return !p.awaiting && p.remaining > 0 && p.remaining <= 7; }).length;
 
   const update = (key, val) => setCustomers(prev => prev.map(c => c.id === selected ? { ...c, [key]: val } : c));
+  const openCustomer = (id) => { setSelected(id); setDetailTab("info"); setMobileView("detail"); };
+  const backToCustomerList = () => setMobileView("list");
+  const browseCustomer = (direction) => {
+    if (!selectedCustomer) return;
+    const index = filteredCustomers.findIndex(c => c.id === selectedCustomer.id);
+    const nextIndex = index + direction;
+    if (nextIndex >= 0 && nextIndex < filteredCustomers.length) {
+      setSelected(filteredCustomers[nextIndex].id);
+      setDetailTab("info");
+    }
+  };
 
   const confirmPackageDates = async () => {
     if (!selectedCustomer) return notify("Select a customer first.");
@@ -958,31 +1091,107 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
     } finally { setNotificationSending(false); }
   };
 
-  return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><div className="container">
+  const activeDayData = program[activeDay] || { workout: "", exercises: [], meals: [] };
+  const activeDayExercises = activeDayData.exercises || [];
+  const activeDayMeals = activeDayData.meals || [];
+  const setActiveDayList = (key, index, value) => { const list = [...(program[activeDay]?.[key] || [])]; list[index] = value; updateProgram(activeDay, key, list); };
+  const addActiveDayItem = key => updateProgram(activeDay, key, [...(program[activeDay]?.[key] || []), ""]);
+  const removeActiveDayItem = (key, index) => updateProgram(activeDay, key, (program[activeDay]?.[key] || []).filter((_, i) => i !== index));
+  const selectedStatus = selectedCustomer ? packageProgress(selectedCustomer.startDate, selectedCustomer.endDate) : null;
+
+  return <motion.main className="page admin-app" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><div className="container">
     <div className="admin-head"><div><div className="section-label">COACH CONTROL CENTER</div><h1>Admin <span>dashboard.</span></h1><p>Manage customer packages, dates, notifications and weekly programs from one place.</p></div><div className="admin-identity"><CheckCircle2 size={16} /> Signed in as <b>{auth?.currentUser?.email || ADMIN_EMAIL}</b></div></div>
     <div className="admin-summary"><div className="admin-summary-card"><Users size={18} /><span>Total customers</span><b>{customers.length}</b></div><div className="admin-summary-card"><CheckCircle2 size={18} /><span>Active packages</span><b>{activeCount}</b></div><div className="admin-summary-card"><Clock3 size={18} /><span>Awaiting dates</span><b>{pendingCount}</b></div><div className="admin-summary-card"><Bell size={18} /><span>Expires ≤ 7 days</span><b>{expiringCount}</b></div></div>
-    <div className="admin-tabs"><button className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}><Users /> Customers <span className="tab-count">{customers.length}</span></button><button className={tab === "program" ? "active" : ""} onClick={() => setTab("program")}><Dumbbell /> Weekly program</button></div>
-    {adminLoading ? <div className="panel loading-panel"><div className="spinner" /><h3>Loading customers…</h3><p>Getting all customer profiles from Firebase.</p></div> : tab === "customers" ? <div className="admin-grid">
-      <div className="customer-list"><div className="customer-list-top"><input className="customer-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers…" /><span>{filteredCustomers.length}</span></div>
-        {filteredCustomers.length === 0 ? <div className="empty-state">No customer accounts found.<br />Ask the customer to Sign Up first.</div> : filteredCustomers.map(c => { const p = packageProgress(c.startDate, c.endDate); return <motion.button whileHover={{ x: 2 }} className={selected === c.id ? "selected" : ""} key={c.id} onClick={() => setSelected(c.id)}><span className="customer-avatar">{(c.name || c.email || "C")[0]}</span><span><b>{c.name || "Unnamed customer"}</b><small>{c.email}</small><em className="customer-package-status">{c.package || "No package"} · {p.awaiting ? "Awaiting dates" : `${p.remaining}d left`}</em></span><ChevronDown size={15} /></motion.button>; })}
-      </div>
-      {selectedCustomer && <div className="admin-editor panel">
-        <div className="editor-title"><div><div className="section-label">CLIENT</div><h2>{selectedCustomer.name || "Customer"}</h2><small>{selectedCustomer.email}</small></div><span className={`status ${packageProgress(selectedCustomer.startDate, selectedCustomer.endDate).awaiting ? "pending-status" : packageProgress(selectedCustomer.startDate, selectedCustomer.endDate).active ? "" : "expired-status"}`}>{packageProgress(selectedCustomer.startDate, selectedCustomer.endDate).awaiting ? "AWAITING DATES" : packageProgress(selectedCustomer.startDate, selectedCustomer.endDate).active ? "ACTIVE" : "EXPIRED"}</span></div>
-        <div className="editor-grid">{[["name", "Name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height"], ["weight", "Weight"], ["goal", "Goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health notes"], ["package", "Package"]].map(([key, label]) => <label key={key}>{label}<input value={selectedCustomer[key] ?? ""} onChange={e => update(key, e.target.value)} /></label>)}</div>
-        <div className="package-confirm-box"><div><span className="section-label">PACKAGE ACTIVATION</span><h3>{selectedCustomer.package || "No package selected"} · {getPackageDurationLabel(selectedCustomer.package)}</h3><p>Choose the start date. The end date is calculated automatically from the selected package and sent to the customer dashboard.</p></div><div className="package-confirm-fields"><label>Start date<input type="date" value={startDateDraft} onChange={e => setStartDateDraft(e.target.value)} /></label><label>Calculated end date<input type="date" value={getPackageEndDate(selectedCustomer.package, startDateDraft)} readOnly /></label></div><div className="confirm-result"><span>Start: <b>{formatDate(startDateDraft || selectedCustomer.startDate)}</b></span><ArrowRight size={15} /><span>End: <b>{formatDate(getPackageEndDate(selectedCustomer.package, startDateDraft || selectedCustomer.startDate) || selectedCustomer.endDate)}</b></span><span className="duration-pill">{getPackageDurationLabel(selectedCustomer.package).toUpperCase()}</span></div><button className="primary-btn" onClick={confirmPackageDates} disabled={saving || !selectedCustomer.package}><CheckCircle2 size={17} /> {saving ? "Confirming…" : "Confirm start & end dates"}</button></div>
-        <button className="outline-dark" onClick={saveCustomer} disabled={saving}><Save size={17} /> {saving ? "Saving…" : "Save customer information"}</button>
-        <div className="customer-notification-box">
-          <div><span className="section-label">DIRECT NOTIFICATION</span><h3>Send to this customer</h3><p>Only <b>{selectedCustomer.name || selectedCustomer.email}</b> will receive this notification.</p></div>
-          <label>Notification title<input value={notificationTitle} onChange={e => setNotificationTitle(e.target.value)} placeholder="e.g. Your next check-in is ready" /></label>
-          <label>Message<textarea value={notificationMessage} onChange={e => setNotificationMessage(e.target.value)} placeholder="Write a message for this customer…" rows={3} /></label>
-          <motion.button className="primary-btn" onClick={sendCustomerNotification} disabled={notificationSending} whileTap={{ scale: .98 }}><Send size={17} /> {notificationSending ? "Sending…" : "Send notification"}</motion.button>
+    <div className="admin-tabs"><button className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}><Users size={16} /> Customers <span className="tab-count">{customers.length}</span></button><button className={tab === "program" ? "active" : ""} onClick={() => setTab("program")}><Utensils size={16} /> Meals & program</button></div>
+
+    {adminLoading ? <div className="panel loading-panel"><div className="spinner" /><h3>Loading customers…</h3><p>Getting all customer profiles from Firebase.</p></div> : tab === "customers" ? <div className={`admin-app-grid mobile-showing-${mobileView}`}>
+      <div className="customer-pane">
+        <div className="customer-list-top"><Search size={15} /><input className="customer-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers…" /><span>{filteredCustomers.length}</span></div>
+        <div className="customer-list">
+          {filteredCustomers.length === 0 ? <div className="empty-state">No customer accounts found.<br />Ask the customer to Sign Up first.</div> : filteredCustomers.map(c => {
+            const p = packageProgress(c.startDate, c.endDate);
+            const statusClass = p.awaiting ? "pending" : !p.active ? "expired" : p.remaining <= 7 ? "expiring" : "active";
+            const statusLabel = p.awaiting ? "Awaiting dates" : !p.active ? "Expired" : p.remaining <= 7 ? `${p.remaining}d left` : "Active";
+            return <motion.button whileTap={{ scale: .98 }} className={selected === c.id ? "selected" : ""} key={c.id} onClick={() => openCustomer(c.id)}>
+              <span className="customer-avatar">{(c.name || c.email || "C")[0].toUpperCase()}</span>
+              <span className="customer-card-body">
+                <b>{c.name || "Unnamed customer"}</b>
+                <small>{c.email}</small>
+                <span className="customer-card-meta"><em className={`status-chip ${statusClass}`}>{statusLabel}</em><em className="package-chip">{c.package || "No package"}</em></span>
+                {!p.awaiting && <span className="mini-progress"><span style={{ width: `${p.percent}%` }} /></span>}
+              </span>
+              <ChevronRight size={17} className="chevron" />
+            </motion.button>;
+          })}
         </div>
-      </div>}
+      </div>
+
+      <div className="customer-detail-pane">
+        {!selectedCustomer ? <div className="empty-state detail-empty"><Users size={26} /><p>Select a customer to view their profile, package and notifications.</p></div> : <motion.div className="admin-editor panel" key={selectedCustomer.id} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .18 }}>
+          <div className="customer-browser-bar">
+            <button type="button" className="back-btn" onClick={backToCustomerList} aria-label="Back to customers"><ArrowLeft size={18} /></button>
+            <div className="browser-crumb"><Users size={14} /><span>Customers</span><ChevronRight size={13} /><b>{selectedCustomer.name || "Customer"}</b></div>
+            <div className="browser-actions">
+              <button type="button" onClick={() => browseCustomer(-1)} disabled={filteredCustomers.findIndex(c => c.id === selectedCustomer.id) <= 0} aria-label="Previous customer"><ArrowLeft size={15} /></button>
+              <button type="button" onClick={() => browseCustomer(1)} disabled={filteredCustomers.findIndex(c => c.id === selectedCustomer.id) === filteredCustomers.length - 1} aria-label="Next customer"><ArrowRight size={15} /></button>
+            </div>
+          </div>
+          <div className="editor-title">
+            <span className="customer-avatar big">{(selectedCustomer.name || selectedCustomer.email || "C")[0].toUpperCase()}</span>
+            <div className="editor-title-text"><div className="section-label">CLIENT</div><h2>{selectedCustomer.name || "Customer"}</h2><small>{selectedCustomer.email}</small></div>
+            <span className={`status ${selectedStatus.awaiting ? "pending-status" : selectedStatus.active ? "" : "expired-status"}`}>{selectedStatus.awaiting ? "AWAITING DATES" : selectedStatus.active ? "ACTIVE" : "EXPIRED"}</span>
+          </div>
+
+          <div className="detail-subtabs">
+            <button type="button" className={detailTab === "info" ? "active" : ""} onClick={() => setDetailTab("info")}><User size={14} /> Info</button>
+            <button type="button" className={detailTab === "package" ? "active" : ""} onClick={() => setDetailTab("package")}><PackageIcon size={14} /> Package</button>
+            <button type="button" className={detailTab === "notify" ? "active" : ""} onClick={() => setDetailTab("notify")}><Bell size={14} /> Notify</button>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {detailTab === "info" && <motion.div key="info" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
+              <div className="editor-grid">{[["name", "Name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height"], ["weight", "Weight"], ["goal", "Goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health notes"]].map(([key, label]) => <label key={key}>{label}<input value={selectedCustomer[key] ?? ""} onChange={e => update(key, e.target.value)} /></label>)}</div>
+              <button className="outline-dark" onClick={saveCustomer} disabled={saving}><Save size={17} /> {saving ? "Saving…" : "Save customer information"}</button>
+            </motion.div>}
+
+            {detailTab === "package" && <motion.div key="package" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
+              <label className="package-select-label">Package<input value={selectedCustomer.package ?? ""} onChange={e => update("package", e.target.value)} placeholder="e.g. Transformation" /></label>
+              <div className="package-confirm-box"><div><span className="section-label">PACKAGE ACTIVATION</span><h3>{selectedCustomer.package || "No package selected"} · {getPackageDurationLabel(selectedCustomer.package)}</h3><p>Choose the start date. The end date is calculated automatically from the selected package and sent to the customer dashboard.</p></div><div className="package-confirm-fields"><label>Start date<input type="date" value={startDateDraft} onChange={e => setStartDateDraft(e.target.value)} /></label><label>Calculated end date<input type="date" value={getPackageEndDate(selectedCustomer.package, startDateDraft)} readOnly /></label></div><div className="confirm-result"><span>Start: <b>{formatDate(startDateDraft || selectedCustomer.startDate)}</b></span><ArrowRight size={15} /><span>End: <b>{formatDate(getPackageEndDate(selectedCustomer.package, startDateDraft || selectedCustomer.startDate) || selectedCustomer.endDate)}</b></span><span className="duration-pill">{getPackageDurationLabel(selectedCustomer.package).toUpperCase()}</span></div><button className="primary-btn" onClick={confirmPackageDates} disabled={saving || !selectedCustomer.package}><CheckCircle2 size={17} /> {saving ? "Confirming…" : "Confirm start & end dates"}</button></div>
+              <button className="outline-dark" onClick={saveCustomer} disabled={saving}><Save size={17} /> {saving ? "Saving…" : "Save customer information"}</button>
+            </motion.div>}
+
+            {detailTab === "notify" && <motion.div key="notify" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
+              <div className="customer-notification-box no-border">
+                <div><span className="section-label">DIRECT NOTIFICATION</span><h3>Send to this customer</h3><p>Only <b>{selectedCustomer.name || selectedCustomer.email}</b> will receive this notification.</p></div>
+                <label>Notification title<input value={notificationTitle} onChange={e => setNotificationTitle(e.target.value)} placeholder="e.g. Your next check-in is ready" /></label>
+                <label>Message<textarea value={notificationMessage} onChange={e => setNotificationMessage(e.target.value)} placeholder="Write a message for this customer…" rows={3} /></label>
+                <motion.button className="primary-btn" onClick={sendCustomerNotification} disabled={notificationSending} whileTap={{ scale: .98 }}><Send size={17} /> {notificationSending ? "Sending…" : "Send notification"}</motion.button>
+              </div>
+            </motion.div>}
+          </AnimatePresence>
+        </motion.div>}
+      </div>
     </div> : <div className="panel program-admin">
-      <div className="section-label">PROGRAM BUILDER</div><h2>Monday → Sunday</h2>{selectedCustomer ? <p className="program-client">Program for <b>{selectedCustomer.name || selectedCustomer.email}</b></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
-      {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : <div className="admin-day-list">{days.map(day => { const dayData = program[day] || { workout: "", exercises: [], meals: [] }; const exercises = dayData.exercises || []; const meals = dayData.meals || []; const setListItem = (key, index, value) => { const list = [...(program[day]?.[key] || [])]; list[index] = value; updateProgram(day, key, list); }; const addListItem = key => updateProgram(day, key, [...(program[day]?.[key] || []), ""]); const removeListItem = (key, index) => updateProgram(day, key, (program[day]?.[key] || []).filter((_, i) => i !== index)); return <div className="day-editor" key={day}><div className="day-title"><b>{day}</b><span>{dayData.workout || "Rest / no workout"}</span></div><label>Workout title<input value={dayData.workout || ""} onChange={e => updateProgram(day, "workout", e.target.value)} placeholder="e.g. Upper body strength" /></label><div className="program-field-group"><div className="field-group-head"><span>Exercise descriptions</span><button type="button" className="mini-add" onClick={() => addListItem("exercises")}>＋ Add exercise</button></div>{exercises.length === 0 && <div className="field-empty">No exercises added yet.</div>}{exercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><input value={x} onChange={e => setListItem("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} /><button type="button" className="remove-item" onClick={() => removeListItem("exercises", i)} aria-label="Remove exercise">×</button></div>)}</div><div className="program-field-group"><div className="field-group-head"><span>Meals</span><button type="button" className="mini-add" onClick={() => addListItem("meals")}>＋ Add meal</button></div>{meals.length === 0 && <div className="field-empty">No meals added yet.</div>}{meals.map((x, i) => <div className="repeat-row" key={`meal-${i}`}><input value={x} onChange={e => setListItem("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeListItem("meals", i)} aria-label="Remove meal">×</button></div>)}</div></div>; })}</div>}
-      <button className="primary-btn" onClick={saveProgram} disabled={programSaving || programLoading || !selectedCustomer}><Save size={17} /> {programSaving ? "Saving…" : "Save program for this customer"}</button>
+      <div className="section-label">PROGRAM BUILDER</div><h2>Meals & workouts</h2>{selectedCustomer ? <p className="program-client">Drafting for <b>{selectedCustomer.name || selectedCustomer.email}</b></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
+
+      <div className="day-tabs admin-day-tabs">{days.map(day => { const d = program[day] || {}; const hasContent = !!(d.workout || (d.exercises || []).length || (d.meals || []).length); return <button type="button" className={activeDay === day ? "active" : ""} onClick={() => setActiveDay(day)} key={day}>{day.slice(0, 3)}<small>{day}</small>{hasContent && <i className="day-dot" />}</button>; })}</div>
+
+      {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : <AnimatePresence mode="wait">
+        <motion.div className="day-editor mobile-day-editor" key={activeDay} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: .18 }}>
+          <div className="day-title"><b>{activeDay}</b><span>{activeDayData.workout || "Rest / no workout"}</span></div>
+          <label>Workout title<input value={activeDayData.workout || ""} onChange={e => updateProgram(activeDay, "workout", e.target.value)} placeholder="e.g. Upper body strength" /></label>
+          <div className="program-field-group"><div className="field-group-head"><span><Dumbbell size={14} /> Exercise descriptions</span><button type="button" className="mini-add" onClick={() => addActiveDayItem("exercises")}>＋ Add exercise</button></div>{activeDayExercises.length === 0 && <div className="field-empty">No exercises added yet.</div>}{activeDayExercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><input value={x} onChange={e => setActiveDayList("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} /><button type="button" className="remove-item" onClick={() => removeActiveDayItem("exercises", i)} aria-label="Remove exercise">×</button></div>)}</div>
+          <div className="program-field-group meals-group"><div className="field-group-head"><span><Utensils size={14} /> Meals</span><button type="button" className="mini-add" onClick={() => addActiveDayItem("meals")}>＋ Add meal</button></div>{activeDayMeals.length === 0 && <div className="field-empty">No meals drafted yet for {activeDay}.</div>}{activeDayMeals.map((x, i) => <div className="repeat-row meal-row" key={`meal-${i}`}><input value={x} onChange={e => setActiveDayList("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeActiveDayItem("meals", i)} aria-label="Remove meal">×</button></div>)}</div>
+        </motion.div>
+      </AnimatePresence>}
+
+      <div className="program-save-bar"><button className="primary-btn" onClick={saveProgram} disabled={programSaving || programLoading || !selectedCustomer}><Save size={17} /> {programSaving ? "Saving…" : "Save program for this customer"}</button></div>
     </div>}
+
+    <div className="admin-bottom-nav">
+      <button type="button" className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}><Users size={18} /><span>Customers</span></button>
+      <button type="button" className={tab === "program" ? "active" : ""} onClick={() => setTab("program")}><Utensils size={18} /><span>Meals</span></button>
+    </div>
   </div></motion.main>
 }
 function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
