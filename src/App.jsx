@@ -1352,7 +1352,7 @@ function Footer() { return <footer>
           <a target="_blank" href='https://www.instagram.com/the_wolf_zakaria?stkn=MThnMnU1a2xnb2lmcg=='>
           <span className="social"><i class="fa-brands fa-instagram"></i></span>
           </a>
-          <a target="_blank" href='https://wa.me/212681197174?text=Hello%20Coach%20Im%20interested'>
+          <a target="_blank" href='https://wa.me/212637023780?text=Hello%20Coach%20Im%20interested'>
           <span className="social"><i class="fa-brands fa-whatsapp"></i></span>
           </a>
           <a target="_blank" href='https://maps.app.goo.gl/ckytLd6RMss1KSoJA'>
