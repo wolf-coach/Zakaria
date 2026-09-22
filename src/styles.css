@@ -407,6 +407,84 @@ main.page {
   border-radius: 50%;
   padding: 3px;
 }
+.certificate-section {
+  background: #eef2ec;
+  display: none;
+}
+.certificate-grid {
+  display: grid;
+  grid-template-columns: .9fr 1.1fr;
+  gap: 80px;
+  align-items: center;
+}
+.certificate-copy {
+  max-width: 510px;
+  color: #68716b;
+  font-size: 16px;
+}
+.certificate-upload {
+  display: inline-flex;
+  margin-top: 25px;
+  padding: 13px 17px;
+  border: 1px solid #9eb67b;
+  border-radius: 10px;
+  background: #f8fbf3;
+  color: #587425;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.certificate-upload input {
+  display: none;
+}
+.certificate-frame {
+  min-height: 330px;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  border: 1px solid #d5ded1;
+  border-radius: 18px;
+  background: #dfe8dc;
+  box-shadow: 0 24px 55px rgba(32, 48, 34, .13);
+}
+.certificate-image {
+  display: block;
+  width: 100%;
+  max-height: 500px;
+  border: 1px solid #b9cbaa;
+  object-fit: contain;
+  background: #fff;
+}
+.certificate-placeholder {
+  width: 100%;
+  min-height: 295px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px dashed #aabd9a;
+  background: #fbfcf8;
+  color: #71806d;
+  text-align: center;
+}
+.certificate-placeholder b {
+  color: #34452f;
+  font-size: 20px;
+}
+.certificate-placeholder span {
+  font-size: 12px;
+}
+.certificate-placeholder-mark {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: #edf7df;
+  color: #71982d;
+}
 .dark-section {
   background: #0b0f0d;
   color: #fff;
@@ -749,7 +827,6 @@ button.mini-add {
 .day-tabs button.active {
   background: #172018;
   color: var(--green);
-  box-shadow: 0 4px 12px #00012;
 }
 .admin-day-tabs button {
   position: relative;
@@ -1182,14 +1259,16 @@ select::picker(select) {
 .program-save-bar {
   margin-top: 22px;
 }
-.meals-group {
+.meals-group,
+.exercise-group {
   background: #f8fbf3;
   border: 1px solid #e4eed6;
   border-radius: 13px;
   padding: 14px;
   margin-top: 14px;
 }
-.meals-group .field-group-head span {
+.meals-group .field-group-head span,
+.exercise-group .field-group-head span {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1434,6 +1513,7 @@ footer {
     width: 100%;
   }
   .two-col,
+  .certificate-grid,
   .dashboard-grid,
   .admin-app-grid {
     display: grid;
@@ -2281,8 +2361,8 @@ footer {
   padding: 24px;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 24px;
-  background: linear-gradient(145deg, rgba(255,255,255,.065), rgba(255,255,255,.025));
-  box-shadow: 0 18px 50px rgba(0,0,0,.12);
+  background: linear-gradient(145deg, #a5df3f9c, rgba(255, 255, 255, .025));
+
 }
 .how-card-top {
   display: flex;

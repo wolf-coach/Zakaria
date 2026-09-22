@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence,
+  animate,
   useScroll,
   useSpring,
   useTransform,
   useMotionValue,
   useVelocity,
-  useAnimationFrame } from "framer-motion";
+  useAnimationFrame,
+  useInView } from "framer-motion";
 import { wrap } from "@motionone/utils";
 import {
   ArrowRight, ArrowLeft, Bell, Check, ChevronDown, ChevronRight, Dumbbell, Flame, HeartPulse, Instagram, Package as PackageIcon, Trash2,
@@ -23,9 +25,37 @@ import { Autoplay, Navigation } from "swiper/modules";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword } from "./lib/firebase";
 import { ref, get, set, update, remove, onValue } from "firebase/database";
-import { demoCustomer, demoCustomers, demoProgram } from "./data/demo";
 
 const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "omar@gmail.com").trim().toLowerCase();
+const demoCustomer = {
+  id: "demo-customer",
+  name: "Alex Morgan",
+  email: "alex@example.com",
+  age: 29,
+  gender: "Male",
+  height: 178,
+  weight: 78,
+  goal: "Build lean muscle",
+  allergies: "Peanuts",
+  health: "No known conditions",
+  phone: "+212 600 000 000",
+  package: "Elite Coaching",
+  startDate: "2026-09-01",
+  endDate: "2026-10-01"
+};
+const demoProgram = {
+  Monday: { workout: "Upper Body Strength", exercises: ["Bench press — 4 × 8", "Pull-ups — 4 × 6", "Shoulder press — 3 × 10"], meals: ["Oats + berries + yogurt", "Chicken rice bowl", "Salmon + vegetables"] },
+  Tuesday: { workout: "Lower Body Strength", exercises: ["Squat — 4 × 8", "Romanian deadlift — 3 × 10", "Walking lunges — 3 × 12"], meals: ["Eggs + wholegrain toast", "Greek yogurt + fruit", "Lean beef + potatoes"] },
+  Wednesday: { workout: "Active Recovery", exercises: ["30 min walk", "10 min mobility", "Stretching — 15 min"], meals: ["Omelette + avocado", "Tuna wrap", "Chicken + quinoa"] },
+  Thursday: { workout: "Push", exercises: ["Incline press — 4 × 8", "Lateral raises — 3 × 15", "Triceps extensions — 3 × 12"], meals: ["Protein oats", "Turkey sandwich", "White fish + rice"] },
+  Friday: { workout: "Pull", exercises: ["Lat pulldown — 4 × 10", "Cable row — 3 × 10", "Biceps curl — 3 × 12"], meals: ["Eggs + fruit", "Chicken salad", "Beef + vegetables"] },
+  Saturday: { workout: "Full Body", exercises: ["Goblet squat — 3 × 12", "Push-ups — 3 × 12", "Kettlebell swing — 3 × 15"], meals: ["Greek yogurt bowl", "Chicken wrap", "Salmon + sweet potato"] },
+  Sunday: { workout: "Rest & Recovery", exercises: ["Light walk", "Mobility — 15 min"], meals: ["Balanced breakfast", "Protein-rich lunch", "Light dinner"] }
+};
+const demoCustomers = [
+  demoCustomer,
+  { ...demoCustomer, id: "customer-2", name: "Sara Benali", email: "sara@example.com", age: 34, gender: "Female", height: 165, weight: 68, goal: "Fat loss", allergies: "None", package: "Transformation", startDate: "2026-09-05", endDate: "2026-12-05" }
+];
 const days = Object.keys(demoProgram);
 const emptyProgram = Object.fromEntries(days.map(day => [day, { workout: "", exercises: [], meals: [] }]));
 
@@ -51,7 +81,7 @@ function ParallaxText({ children, baseVelocity = 100 }) {
  
   const directionFactor = useRef(1);
   useAnimationFrame((t, delta) => {
-    let moveBy = directionFactor.current * baseVelocity * (delta / 1000);
+    let moveBy = directionFactor.current * baseVelocity * (delta / 1600);
  
     /**
      * This is what changes the direction of the scroll once we
@@ -176,6 +206,7 @@ function useLocalState(key, initial) {
 
 function App() {
   const [page, setPage] = useState("home");
+  const [dashboardSection, setDashboardSection] = useState("home");
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(!firebaseConfigured);
   const [customer, setCustomer] = useState(() => firebaseConfigured ? emptyCustomer : demoCustomer);
@@ -194,6 +225,11 @@ function App() {
   const go = (p) => {
     setPage(p);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const openDashboardSection = (section) => {
+    setDashboardSection(section);
+    go("dashboard");
   };
 
   // Firebase is the source of truth for the currently signed-in customer.
@@ -459,8 +495,8 @@ function App() {
       <Nav page={page} go={go} isCustomer={isCustomer} isAdmin={isAdmin} logout={handleLogout} />
       <AnimatePresence mode="wait">
         {page === "home" && <Home key="home" go={go} />}
-        {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} go={go} />}
-        {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} go={go} />}
+        {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} go={go} initialSection={dashboardSection} />}
+        {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} go={go} openDashboardSection={openDashboardSection} />}
         {page === "admin" && isAdmin && <Admin key="admin" customers={customers} setCustomers={setCustomers} program={program} setProgram={setProgram} notify={notify} />}
         {page === "login" && <Auth key="login" mode="login" onSubmit={(f) => handleAuth("login", f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthMode("signup")} />}
       </AnimatePresence>
@@ -531,6 +567,7 @@ function Nav({ page, go, isCustomer, isAdmin, logout }) {
   </div></header>;
 }
 function Home({ go }) {
+  const [certificateImage, setCertificateImage] = useState("");
   const packs = [
     { name: "Basic", price: "1000MAD", desc: "1 To 1 At Gym Metroflex.", items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
     { name: "Transformation", price: "1200MAD", desc: "1 To 1 In Your Home Or Your Gym", popular: true, items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
@@ -541,6 +578,14 @@ function Home({ go }) {
     ["Sara B.", "I finally understand how to train and eat for my goal. Amazing coaching.", "5.0"],
     ["Walid R.", "The weekly dashboard keeps me accountable every single day.", "5.0"]
   ];
+
+  const handleCertificateUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setCertificateImage(String(reader.result));
+    reader.readAsDataURL(file);
+  };
 
 
 
@@ -608,10 +653,10 @@ function Home({ go }) {
             </div>
             <div className="mini-stats">
               <div>
-                <b>12</b>
+                <AnimatedNumber value={12} />
                 <span>Weeks</span>
               </div>
-              <div><b>4.8</b>
+              <div><AnimatedNumber value={4.8} decimals={1} />
               <span>Rating</span>
               </div>
               <div>
@@ -647,13 +692,11 @@ function Home({ go }) {
           <Swiper
             className="how-swiper"
             spaceBetween={16}
-            slidesPerView={1.08}
+            slidesPerView={1}
             breakpoints={{
               640: { slidesPerView: 2 },
               980: { slidesPerView: 3 }
             }}
-            navigation
-            modules={[Navigation]}
           >
             {[
               { icon: <User size={22} />, number: "01", title: "Create your account", text: "Choose your coaching package and tell us about your goals. Your personal dashboard is created automatically." },
@@ -666,7 +709,7 @@ function Home({ go }) {
                   className="how-card"
                   whileHover={{ y: -6 }}
                   whileTap={{ scale: .98 }}
-                  transition={{ type: "spring", stiffness: 320, damping: 22 }}
+                  transition={{ type: "spring", stiffness: 3209, damping: 22 }}
                 >
                   <div className="how-card-top">
                     <span className="how-icon">{step.icon}</span>
@@ -679,18 +722,20 @@ function Home({ go }) {
               </SwiperSlide>
             ))}
           </Swiper>
-          <div className="how-swipe-hint"><ArrowLeft size={15} /> Swipe to explore <ArrowRight size={15} /></div>
+          <div className="how-swipe-hint">
+            <ArrowLeft size={15} /> Swipe to explore <ArrowRight size={15} /></div>
         </motion.div>
       </div>
     </section>
 
     <section id="about" className="section about"><div className="container two-col">
-      <Reveal><div className="section-label">01 — ABOUT THE COACH</div><h2>Coaching that fits <span>your life.</span></h2><p>I believe fitness should make your life better — not take it over. My coaching combines smart training, practical nutrition and real accountability to create results you can keep.</p><p>Every client gets a plan built around their current level, schedule, preferences and goal.</p><button className="text-btn">Meet your coach <ArrowRight size={17} /></button></Reveal>
+      <Reveal><div className="section-label">01 — ABOUT THE COACH</div><h2>Coaching that fits <span>your life.</span></h2><p>I believe fitness should make your life better — not take it over. My coaching combines smart training, practical nutrition and real accountability to create results you can keep.</p><p>Every client gets a plan built around their current level, schedule, preferences and goal.</p>
+      <a className="text-btn" target="_blank" href='https://wa.me/212681197174?text=Hello%20Coach%20ZAKARIA%20Im%20interested'>Meet your coach <ArrowRight size={17} /></a></Reveal>
       <Reveal delay={.15}><div className="about-card"><div className="about-icon"><Target /></div><h3>Personal. Measurable. Sustainable.</h3><div className="about-list"><span><Check />Individual training</span><span><Check />Personal nutrition</span><span><Check />Weekly accountability</span><span><Check />Progress adjustments</span></div></div></Reveal>
     </div>
     
         <section className="parallax-section">
-          <ParallaxText baseVelocity={-5}>ZAKARIA RAFALIA 🥇 COACH PERSONEL 🏋️</ParallaxText>
+          <ParallaxText baseVelocity={-5}>ZAKARIA RAFALIA <i class="fa-solid fa-dumbbell"></i> COACH PERSONEL <i class="fa-solid fa-medal"></i></ParallaxText>
         </section>
     </section>
     
@@ -703,6 +748,25 @@ function Home({ go }) {
 
 
 
+    <section className="section certificate-section">
+      <div className="container certificate-grid">
+        <Reveal>
+          <div className="section-label">COACH CERTIFICATE</div>
+          <h2>Proof behind <span>the coaching.</span></h2>
+          <p className="certificate-copy">Show clients the qualification and experience behind every personalized training plan.</p>
+          <label className="certificate-upload">
+            <span>{certificateImage ? "Replace certificate image" : "Add certificate image"}</span>
+            <input type="file" accept="image/*" onChange={handleCertificateUpload} />
+          </label>
+        </Reveal>
+        <Reveal delay={.15}>
+          <div className="certificate-frame">
+            {certificateImage ? <img className="certificate-image" src={certificateImage} alt="Coach certificate" /> : <div className="certificate-placeholder"><div className="certificate-placeholder-mark"><Check size={28} /></div><b>Your certificate</b><span>Upload an image to display it here</span></div>}
+          </div>
+        </Reveal>
+      </div>
+    </section>
+
     <section className="section dark-section"><div className="container"><Reveal><div className="section-label">02 — WHAT I DO</div><h2>Everything you need to <span>move forward.</span></h2></Reveal><div className="service-grid">
       {[["01", "TRAINING", "Structured workouts built for your goal, experience and available equipment.", Dumbbell], ["02", "NUTRITION", "Simple meal guidance and personalized plans you can actually follow.", Utensils], ["03", "ACCOUNTABILITY", "Regular check-ins, adjustments and direct support when you need it.", HeartPulse]].map(([n, t, d, I], i) => <Reveal delay={i * .1} key={n}><div className="service-card"><span>{n}</span><I /><h3>{t}</h3><p>{d}</p></div></Reveal>)}
     </div></div></section>
@@ -714,12 +778,10 @@ function Home({ go }) {
   </motion.main>
 }
 
-function Dashboard({ customer, program, go }) {
+function Dashboard({ customer, program, go, initialSection = "home" }) {
   const [selected, setSelected] = useState("Monday");
-  const [activeSection, setActiveSection] = useState("home");
+  const [activeSection, setActiveSection] = useState(initialSection);
   const [notifications, setNotifications] = useState([]);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const notificationRef = useRef(null);
   const d = normalizeDay(program?.[selected]);
   const progress = packageProgress(customer.startDate, customer.endDate);
   const firstName = customer.name?.trim()?.split(" ")[0] || "there";
@@ -734,15 +796,6 @@ function Dashboard({ customer, program, go }) {
       setNotifications(list);
     }, (e) => console.error("Could not load notifications", e));
   }, [customer.id]);
-
-  useEffect(() => {
-    const close = (event) => {
-      if (notificationRef.current && !notificationRef.current.contains(event.target)) setNotificationOpen(false);
-    };
-    if (!notificationOpen) return;
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [notificationOpen]);
 
   const packageNotification = progress.awaiting
     ? { id: "package-pending", title: "Package awaiting confirmation", message: "Your coach will confirm your package start date and end date.", createdAt: Date.now(), system: true }
@@ -769,8 +822,11 @@ function Dashboard({ customer, program, go }) {
   };
 
   const openSection = (section) => {
+    if (section === "profile") {
+      go("profile");
+      return;
+    }
     setActiveSection(section);
-    setNotificationOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -792,24 +848,10 @@ function Dashboard({ customer, program, go }) {
     <div className="container">
       <div className="dash-head">
         <div><div className="section-label">CLIENT DASHBOARD</div><h1>Good morning, <span>{firstName}.</span></h1><p>Stay consistent. Small actions, big results.</p></div>
-        <div className="dash-actions">
-          <div className="notification-wrap" ref={notificationRef}>
-            <motion.button className="notification-button" onClick={() => setNotificationOpen(v => !v)} whileTap={{ scale: .94 }} aria-label="Notifications">
-              <Bell size={19} />{unreadCount > 0 && <motion.span className="notification-badge" initial={{ scale: 0 }} animate={{ scale: 1 }}>{unreadCount > 9 ? "9+" : unreadCount}</motion.span>}
-            </motion.button>
-            <AnimatePresence>
-              {notificationOpen && <motion.div className="notification-panel" initial={{ opacity: 0, y: -10, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: .97 }} transition={{ type: "spring", stiffness: 420, damping: 28 }}>
-                <div className="notification-head"><div><span className="section-label">INBOX</span><h3>Notifications</h3></div><div className="notification-head-actions"><span>{visibleNotifications.length}</span><button type="button" className="notification-close" onClick={() => setNotificationOpen(false)} aria-label="Close notifications"><X size={16} /></button></div></div>
-                {renderNotifications(true)}
-              </motion.div>}
-            </AnimatePresence>
-          </div>
-          <button className="outline-dark" onClick={() => go("profile")}><User size={17} /> My profile</button>
-        </div>
       </div>
 
       <nav className="customer-page-browser" aria-label="Customer dashboard sections">
-        {[{ id: "home", label: "Home", icon: LayoutDashboard }, { id: "workout", label: "Workout", icon: Dumbbell }, { id: "notifications", label: "Notifications", icon: Bell }].map(item => {
+        {[{ id: "home", label: "Home", icon: LayoutDashboard }, { id: "workout", label: "Workout", icon: Dumbbell }, { id: "notifications", label: "Notifications", icon: Bell }, { id: "profile", label: "My profile", icon: User }].map(item => {
           const Icon = item.icon;
           return <motion.button key={item.id} className={activeSection === item.id ? "active" : ""} onClick={() => openSection(item.id)} whileTap={{ scale: .96 }}>
             <Icon size={17} /> <span>{item.label}</span>{item.id === "notifications" && unreadCount > 0 && <b>{unreadCount > 9 ? "9+" : unreadCount}</b>}
@@ -850,7 +892,7 @@ function Dashboard({ customer, program, go }) {
 
 function Stat({ icon: Icon, label, value }) { return <div className="stat-card"><div className="stat-icon"><Icon size={18} /></div><small>{label}</small><b>{value}</b></div> }
 
-function Profile({ customer, setCustomer, notify, go }) {
+function Profile({ customer, setCustomer, notify, go, openDashboardSection }) {
   const [form, setForm] = useState(customer);
   const save = async () => {
     try {
@@ -867,8 +909,13 @@ function Profile({ customer, setCustomer, notify, go }) {
   const fields = [["name", "Full name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height (cm)"], ["weight", "Weight (kg)"], ["goal", "Main goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health / medical notes"]];
   return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
     <div className="container narrow">
+      <nav className="customer-page-browser" aria-label="Customer sections">
+        <motion.button onClick={() => openDashboardSection("home")} whileTap={{ scale: .96 }}><LayoutDashboard size={17} /><span>Home</span></motion.button>
+        <motion.button onClick={() => openDashboardSection("workout")} whileTap={{ scale: .96 }}><Dumbbell size={17} /><span>Workout</span></motion.button>
+        <motion.button onClick={() => openDashboardSection("notifications")} whileTap={{ scale: .96 }}><Bell size={17} /><span>Notifications</span></motion.button>
+        <motion.button className="active" aria-current="page" whileTap={{ scale: .96 }}><User size={17} /><span>My profile</span></motion.button>
+      </nav>
       <div className="page-heading">
-        <button className="outline-dark profile-back" onClick={() => go("dashboard")}><ArrowRight size={17} /> Back to dashboard</button>
         <div className="section-label">
         MY PROFILE
         </div>
@@ -898,6 +945,7 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   const [mobileView, setMobileView] = useState("list");
   const [detailTab, setDetailTab] = useState("info");
   const [activeDay, setActiveDay] = useState(days[0]);
+  const currentDay = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
 
   useEffect(() => {
     if (!firebaseConfigured || !db || !auth?.currentUser) {
@@ -1174,14 +1222,18 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
     </div> : <div className="panel program-admin">
       <div className="section-label">PROGRAM BUILDER</div><h2>Meals & workouts</h2>{selectedCustomer ? <p className="program-client">Drafting for <b>{selectedCustomer.name || selectedCustomer.email}</b></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
 
-      <div className="day-tabs admin-day-tabs">{days.map(day => { const d = program[day] || {}; const hasContent = !!(d.workout || (d.exercises || []).length || (d.meals || []).length); return <button type="button" className={activeDay === day ? "active" : ""} onClick={() => setActiveDay(day)} key={day}>{day.slice(0, 3)}<small>{day}</small>{hasContent && <i className="day-dot" />}</button>; })}</div>
+      <div className="day-tabs admin-day-tabs">{days.map(day => { const isToday = day === currentDay; return <button type="button" className={activeDay === day ? "active" : ""} onClick={() => setActiveDay(day)} key={day}>{day.slice(0, 3)}<small>{day}</small>{isToday && <i className="day-dot" />}</button>; })}</div>
 
       {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : <AnimatePresence mode="wait">
         <motion.div className="day-editor mobile-day-editor" key={activeDay} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: .18 }}>
           <div className="day-title"><b>{activeDay}</b><span>{activeDayData.workout || "Rest / no workout"}</span></div>
           <label>Workout title<input value={activeDayData.workout || ""} onChange={e => updateProgram(activeDay, "workout", e.target.value)} placeholder="e.g. Upper body strength" /></label>
-          <div className="program-field-group"><div className="field-group-head"><span><Dumbbell size={14} /> Exercise descriptions</span><button type="button" className="mini-add" onClick={() => addActiveDayItem("exercises")}>＋ Add exercise</button></div>{activeDayExercises.length === 0 && <div className="field-empty">No exercises added yet.</div>}{activeDayExercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><input value={x} onChange={e => setActiveDayList("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} /><button type="button" className="remove-item" onClick={() => removeActiveDayItem("exercises", i)} aria-label="Remove exercise">×</button></div>)}</div>
-          <div className="program-field-group meals-group"><div className="field-group-head"><span><Utensils size={14} /> Meals</span><button type="button" className="mini-add" onClick={() => addActiveDayItem("meals")}>＋ Add meal</button></div>{activeDayMeals.length === 0 && <div className="field-empty">No meals drafted yet for {activeDay}.</div>}{activeDayMeals.map((x, i) => <div className="repeat-row meal-row" key={`meal-${i}`}><input value={x} onChange={e => setActiveDayList("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeActiveDayItem("meals", i)} aria-label="Remove meal">×</button></div>)}</div>
+          <div className="program-field-group exercise-group">
+            <div className="field-group-head"><span><Dumbbell size={14} /> Exercise</span>
+            <button type="button" className="mini-add" onClick={() => addActiveDayItem("exercises")}><i class="fa-solid fa-plus"></i> Add exercise</button>
+            </div>{activeDayExercises.length === 0 && <div className="field-empty">No exercises added yet.</div>}{activeDayExercises.map((x, i) => <div className="repeat-row" key={`ex-${i}`}><input value={x} onChange={e => setActiveDayList("exercises", i, e.target.value)} placeholder={`Exercise ${i + 1} — description, sets, reps, rest, notes…`} /><button type="button" className="remove-item" onClick={() => removeActiveDayItem("exercises", i)} aria-label="Remove exercise"><i class="fa-solid fa-trash-can"></i></button></div>)}</div>
+          <div className="program-field-group meals-group">
+            <div className="field-group-head"><span><Utensils size={14} /> Meals</span><button type="button" className="mini-add" onClick={() => addActiveDayItem("meals")}><i class="fa-solid fa-plus"></i> Add meal</button></div>{activeDayMeals.length === 0 && <div className="field-empty">No meals drafted yet for {activeDay}.</div>}{activeDayMeals.map((x, i) => <div className="repeat-row meal-row" key={`meal-${i}`}><input value={x} onChange={e => setActiveDayList("meals", i, e.target.value)} placeholder={`Meal ${i + 1} — e.g. Breakfast: eggs, oats, fruit`} /><button type="button" className="remove-item" onClick={() => removeActiveDayItem("meals", i)} aria-label="Remove meal"><i class="fa-solid fa-trash-can"></i></button></div>)}</div>
         </motion.div>
       </AnimatePresence>}
 
@@ -1270,6 +1322,20 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
   </div></motion.main>;
 }
 function AuthOverlay({ mode, close, onSubmit, onGoogle, onReset, switchMode }) { return <div className="overlay"><button className="overlay-close" onClick={close}><X /></button><Auth mode={mode} onSubmit={onSubmit} onGoogle={onGoogle} onReset={onReset} switchMode={switchMode} /></div>; }
+function AnimatedNumber({ value, decimals = 0, suffix = "" }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, amount: .6 });
+  const count = useMotionValue(0);
+  const displayed = useTransform(count, current => `${current.toFixed(decimals)}${suffix}`);
+
+  useEffect(() => {
+    if (!inView) return undefined;
+    const controls = animate(count, value, { duration: 1.2, ease: "easeOut" });
+    return () => controls.stop();
+  }, [count, inView, value]);
+
+  return <motion.b ref={ref}>{displayed}</motion.b>;
+}
 function Reveal({ children, delay = 0 }) { return <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .15 }} transition={{ duration: .6, delay }}>{children}</motion.div> }
 function Toast({ message }) { return <motion.div className="toast" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}><Check size={17} />{message}</motion.div> }
 function Footer() { return <footer>
@@ -1288,6 +1354,9 @@ function Footer() { return <footer>
           </a>
           <a target="_blank" href='https://wa.me/212681197174?text=Hello%20Coach%20Im%20interested'>
           <span className="social"><i class="fa-brands fa-whatsapp"></i></span>
+          </a>
+          <a target="_blank" href='https://maps.app.goo.gl/ckytLd6RMss1KSoJA'>
+          <span className="social"><i class="fa-regular fa-compass"></i></span>
           </a>
         </div>
       </div>
