@@ -7,6 +7,7 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  verifyPasswordResetCode,
   confirmPasswordReset
 } from "firebase/auth";
 import { getDatabase } from "firebase/database";
@@ -49,8 +50,12 @@ export async function resetPassword(email) {
   if (!firebaseConfigured) return null;
   return sendPasswordResetEmail(auth, email, {
     url: `${window.location.origin}${import.meta.env.BASE_URL}reset-password`,
-    handleCodeInApp: true
+    handleCodeInApp: false
   });
+}
+export async function verifyResetPasswordCode(code) {
+  if (!firebaseConfigured) return null;
+  return verifyPasswordResetCode(auth, code);
 }
 export async function confirmResetPassword(code, password) {
   if (!firebaseConfigured) return null;
