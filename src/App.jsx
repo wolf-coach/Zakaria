@@ -23,7 +23,7 @@ import Img4 from "./data/img4.jpeg";
 
 import { Autoplay, Navigation } from "swiper/modules";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword, confirmResetPassword } from "./lib/firebase";
+import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword, verifyResetPasswordCode, confirmResetPassword } from "./lib/firebase";
 import { ref, get, set, update, remove, onValue } from "firebase/database";
 import { notifySignup } from "./lib/telegram";
 
@@ -206,8 +206,10 @@ function useLocalState(key, initial) {
 }
 
 function App() {
-  const resetCode = new URLSearchParams(window.location.search).get("oobCode");
-  const [page, setPage] = useState(() => resetCode ? "reset-password" : "home");
+  const resetParams = new URLSearchParams(window.location.search);
+  const resetCode = resetParams.get("oobCode");
+  const resetMode = resetParams.get("mode");
+  const [page, setPage] = useState(() => (resetCode || resetMode === "resetPassword") ? "reset-password" : "home");
   const [dashboardSection, setDashboardSection] = useState("home");
   const [customerUnreadCount, setCustomerUnreadCount] = useState(0);
   const [user, setUser] = useState(null);
@@ -1341,35 +1343,137 @@ function AuthOverlay({ mode, close, onSubmit, onGoogle, onReset, switchMode }) {
 function ResetPasswordPage({ code, notify, go }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [invalid, setInvalid] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  const submit = async () => {
+  useEffect(() => {
+    let active = true;
+    async function checkCode() {
+      if (!code) {
+        if (active) {
+          setInvalid(true);
+          setLoading(false);
+        }
+        return;
+      }
+      try {
+        const email = await verifyResetPasswordCode(code);
+        if (active) {
+          setAccountEmail(email || "");
+          setInvalid(false);
+          setLoading(false);
+        }
+      } catch {
+        if (active) {
+          setInvalid(true);
+          setLoading(false);
+        }
+      }
+    }
+    checkCode();
+    return () => { active = false; };
+  }, [code]);
+
+  const strength = password.length === 0 ? 0 : password.length < 6 ? 1 : password.length < 10 ? 2 : 3;
+  const strengthLabel = ["", "Too short", "Good", "Strong"][strength];
+  const strengthClass = ["", "weak", "medium", "strong"][strength];
+
+  const submit = async (event) => {
+    event.preventDefault();
     if (!code) return notify("This password reset link is missing or invalid.");
     if (password.length < 6) return notify("Password must be at least 6 characters.");
     if (password !== confirmPassword) return notify("Passwords do not match.");
     setSaving(true);
     try {
       await confirmResetPassword(code, password);
-      notify("Password updated. You can sign in now.");
-      go("login");
+      setSuccess(true);
+      notify("Password updated successfully.");
     } catch (error) {
-      notify(error?.code === "auth/expired-action-code" ? "This reset link has expired. Request a new one." : "This reset link is invalid or already used.");
+      const message = error?.code === "auth/expired-action-code"
+        ? "This reset link has expired. Request a new one."
+        : error?.code === "auth/weak-password"
+          ? "Please choose a stronger password."
+          : "This reset link is invalid or already used.";
+      notify(message);
+      if (error?.code === "auth/expired-action-code" || error?.code === "auth/invalid-action-code") setInvalid(true);
     } finally {
       setSaving(false);
     }
   };
 
-  return <motion.main className="auth-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-    <div className="auth-box reset-box">
-      <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
-      <div className="section-label">ACCOUNT SECURITY</div>
-      <h1>Set a new <span>password.</span></h1>
-      <p>Choose a new password for your coaching account.</p>
-      <label>New password<input type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="At least 6 characters" /></label>
-      <label>Confirm password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} placeholder="Repeat your password" /></label>
-      <button className="primary-btn full" onClick={submit} disabled={saving}>{saving ? "Updating…" : "Update password"} <ArrowRight size={17} /></button>
-      <button className="forgot-btn" onClick={() => go("login")}>Return to sign in</button>
-    </div>
+  return <motion.main className="auth-page reset-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <motion.div
+      className="reset-shell"
+      initial={{ opacity: 0, y: 24, scale: .98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: .45, ease: "easeOut" }}
+    >
+      <div className="reset-glow reset-glow-one" />
+      <div className="reset-glow reset-glow-two" />
+
+      <div className="reset-card">
+        <div className="reset-brand">
+          <div className="reset-brand-mark"><ShieldCheck size={22} /></div>
+          <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
+        </div>
+
+        {loading ? <div className="reset-state">
+          <motion.div className="reset-loader" animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
+          <h1>Checking your link<span>.</span></h1>
+          <p>We are securely validating your password reset request.</p>
+        </div> : invalid ? <div className="reset-state">
+          <div className="reset-state-icon error"><X size={28} /></div>
+          <div className="section-label">RESET LINK</div>
+          <h1>This link is no longer <span>valid.</span></h1>
+          <p>The password reset link may have expired, already been used, or be incomplete.</p>
+          <button className="primary-btn full" onClick={() => go("login")}>Back to sign in <ArrowRight size={17} /></button>
+          <button className="forgot-btn reset-secondary" onClick={() => go("login")}>Request a new reset email</button>
+        </div> : success ? <motion.div className="reset-state" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <motion.div className="reset-state-icon success" initial={{ scale: .7 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300 }}><CheckCircle2 size={30} /></motion.div>
+          <div className="section-label">ALL SET</div>
+          <h1>Your password is <span>updated.</span></h1>
+          <p>Your CoachWolf account is secure again. You can now sign in with your new password.</p>
+          <button className="primary-btn full" onClick={() => go("login")}>Continue to sign in <ArrowRight size={17} /></button>
+        </motion.div> : <form className="reset-form" onSubmit={submit}>
+          <div className="section-label">ACCOUNT SECURITY</div>
+          <h1>Set a new <span>password.</span></h1>
+          <p className="reset-intro">Create a new password for your coaching account.</p>
+
+          {accountEmail && <div className="reset-account">
+            <span className="reset-account-dot" />
+            <div><small>Resetting password for</small><strong>{accountEmail}</strong></div>
+          </div>}
+
+          <label>New password
+            <div className="reset-input-wrap">
+              <input type={showPassword ? "text" : "password"} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="At least 6 characters" autoFocus />
+              <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(value => !value)}>{showPassword ? "Hide" : "Show"}</button>
+            </div>
+          </label>
+
+          <div className="password-strength">
+            <div className="strength-bars"><i className={strength >= 1 ? strengthClass : ""} /><i className={strength >= 2 ? strengthClass : ""} /><i className={strength >= 3 ? strengthClass : ""} /></div>
+            <span>{strengthLabel}</span>
+          </div>
+
+          <label>Confirm password
+            <div className="reset-input-wrap">
+              <input type={showConfirm ? "text" : "password"} autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} placeholder="Repeat your new password" />
+              <button type="button" aria-label={showConfirm ? "Hide password" : "Show password"} onClick={() => setShowConfirm(value => !value)}>{showConfirm ? "Hide" : "Show"}</button>
+            </div>
+          </label>
+
+          <div className="reset-rules"><Check size={14} /> Minimum 6 characters <span /> <ShieldCheck size={14} /> Secure reset</div>
+          <button className="primary-btn full reset-submit" type="submit" disabled={saving}>{saving ? "Updating…" : "Update password"} <ArrowRight size={17} /></button>
+          <button className="forgot-btn reset-secondary" type="button" onClick={() => go("login")}>Return to sign in</button>
+        </form>}
+      </div>
+    </motion.div>
   </motion.main>;
 }
 function AnimatedNumber({ value, decimals = 0, suffix = "" }) {
