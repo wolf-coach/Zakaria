@@ -6,7 +6,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  confirmPasswordReset
 } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 
@@ -46,7 +47,14 @@ export async function loginGoogle() {
 }
 export async function resetPassword(email) {
   if (!firebaseConfigured) return null;
-  return sendPasswordResetEmail(auth, email);
+  return sendPasswordResetEmail(auth, email, {
+    url: `${window.location.origin}${import.meta.env.BASE_URL}reset-password`,
+    handleCodeInApp: true
+  });
+}
+export async function confirmResetPassword(code, password) {
+  if (!firebaseConfigured) return null;
+  return confirmPasswordReset(auth, code, password);
 }
 export async function logoutFirebase() {
   if (firebaseConfigured) await signOut(auth);

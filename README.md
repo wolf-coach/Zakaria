@@ -101,6 +101,25 @@ Publish `database.rules.json` in Firebase → Realtime Database → Rules. Repla
 
 After changing `.env`, restart Vite.
 
+## Telegram signup notifications
+
+New customer signup notifications are sent by the Firebase Cloud Function `notifyTelegramOnSignup`. The Telegram bot token is kept server-side and is never exposed in the React app.
+
+1. Create a Telegram bot with BotFather and send it one message from your Telegram account.
+2. Find your chat ID using a trusted Telegram chat ID method or the Bot API `getUpdates` endpoint.
+3. Install dependencies and set the Firebase secrets from the project root:
+
+```bash
+cd functions
+npm install
+cd ..
+firebase functions:secrets:set TELEGRAM_BOT_TOKEN
+firebase functions:secrets:set TELEGRAM_CHAT_ID
+firebase deploy --only functions
+```
+
+After deployment, every new `/users/{uid}` profile created by signup sends the customer's signup information to that Telegram chat.
+
 ## V12 Program Builder update
 - Meals are now repeatable: use **Add meal** to add as many meal inputs as needed for each day.
 - Exercises are now repeatable description fields: use **Add exercise** and enter sets, reps, rest, and coaching notes in the description.

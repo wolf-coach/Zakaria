@@ -1,5 +1,6 @@
 /**
  * CoachFlow – new signup → Telegram notifier
+ * Account used Dinkhir
  * Runs entirely on Google Apps Script (free, no Google Cloud billing needed).
  * The React app POSTs the signup profile here; this script formats it and
  * sends it to your Telegram bot. The bot token never touches the browser.
@@ -24,47 +25,76 @@
  * so the existing /exec URL picks up the change.
  */
 
+function formatDate(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyy-MM-dd");
+}
+
+function addMonths(date, months) {
+  var result = new Date(date.getTime());
+  var originalDay = result.getDate();
+  result.setMonth(result.getMonth() + months);
+  if (result.getDate() !== originalDay) result.setDate(0);
+  return result;
+}
+
 function doPost(e) {
   try {
-    const props = PropertiesService.getScriptProperties();
-    const botToken = props.getProperty("TELEGRAM_BOT_TOKEN");
-    const chatId = props.getProperty("TELEGRAM_CHAT_ID");
+    var props = PropertiesService.getScriptProperties();
+    var botToken = props.getProperty("TELEGRAM_BOT_TOKEN");
+    var chatId = props.getProperty("TELEGRAM_CHAT_ID");
     if (!botToken || !chatId) {
       return ContentService.createTextOutput(
         "Missing TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID script properties."
       );
     }
 
-    const data = JSON.parse((e.postData && e.postData.contents) || "{}");
-    const v = (val) => (val === undefined || val === null || val === "" ? "—" : val);
+    var data = JSON.parse((e.postData && e.postData.contents) || "{}");
+    var v = function (val) {
+      return val === undefined || val === null || val === "" ? "-" : val;
+    };
 
-    const lines = [
-      "🆕 New CoachFlow signup",
+    var startDate = data.startDate || formatDate(new Date());
+    var packageMonths = String(data.package || "").toLowerCase() === "special promo" ? 3 : 1;
+    var endDate = data.endDate || formatDate(addMonths(new Date(), packageMonths));
+
+    var lines = [
+      "🥇 New CoachFlow signup",
       "",
-      `Name: ${v(data.name)}`,
-      `Email: ${v(data.email)}`,
-      `Phone: ${v(data.phone)}`,
-      `Age: ${v(data.age)}`,
-      `Gender: ${v(data.gender)}`,
-      `Height: ${v(data.height)}`,
-      `Weight: ${v(data.weight)}`,
-      `Goal: ${v(data.goal)}`,
-      `Allergies: ${v(data.allergies)}`,
-      `Health notes: ${v(data.health)}`,
-      `Package: ${v(data.package)}`,
-      `Start date: ${v(data.startDate)}`,
-      `End date: ${v(data.endDate)}`,
+      "👤 Name: " + v(data.name),
+      "📧 Email: " + v(data.email),
+      "📱 Phone: " + v(data.phone),
+      "🎂 Age: " + v(data.age),
+      "⚧ Gender: " + v(data.gender),
+      "📏 Height: " + v(data.height),
+      "⚖️ Weight: " + v(data.weight),
+      "🎯 Goal: " + v(data.goal),
+      "🥜 Allergies: " + v(data.allergies),
+      "🩺 Health notes: " + v(data.health),
+      "📦 Package: " + v(data.package),
+      "📅 Start date: " + startDate,
+      "🏁 End date: " + endDate,
+      "⏱️ Duration: " + packageMonths + " month" + (packageMonths === 1 ? "" : "s"),
       "",
-      `Firebase UID: ${v(data.id)}`,
-      `Signed up: ${new Date().toLocaleString("en-GB", { timeZone: "UTC" })} UTC`,
+      "🕒 Signed up: " + new Date().toLocaleString("en-GB", { timeZone: "UTC" }) + " UTC"
     ];
 
-    UrlFetchApp.fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    var telegramResponse = UrlFetchApp.fetch("https://api.telegram.org/bot" + botToken + "/sendMessage", {
       method: "post",
       contentType: "application/json",
       payload: JSON.stringify({ chat_id: chatId, text: lines.join("\n") }),
-      muteHttpExceptions: true,
+      muteHttpExceptions: true
     });
+
+    var code = telegramResponse.getResponseCode();
+    var body = telegramResponse.getContentText();
+    if (code < 200 || code >= 300) {
+      throw new Error("Telegram API HTTP " + code + ": " + body);
+    }
+
+    var result = JSON.parse(body);
+    if (!result.ok) {
+      throw new Error("Telegram API rejected message: " + body);
+    }
 
     return ContentService.createTextOutput("OK");
   } catch (err) {

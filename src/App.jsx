@@ -23,8 +23,9 @@ import Img4 from "./data/img4.jpeg";
 
 import { Autoplay, Navigation } from "swiper/modules";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword } from "./lib/firebase";
+import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword, confirmResetPassword } from "./lib/firebase";
 import { ref, get, set, update, remove, onValue } from "firebase/database";
+import { notifySignup } from "./lib/telegram";
 
 const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "omar@gmail.com").trim().toLowerCase();
 const demoCustomer = {
@@ -205,14 +206,17 @@ function useLocalState(key, initial) {
 }
 
 function App() {
-  const [page, setPage] = useState("home");
+  const resetCode = new URLSearchParams(window.location.search).get("oobCode");
+  const [page, setPage] = useState(() => resetCode ? "reset-password" : "home");
   const [dashboardSection, setDashboardSection] = useState("home");
+  const [customerUnreadCount, setCustomerUnreadCount] = useState(0);
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(!firebaseConfigured);
   const [customer, setCustomer] = useState(() => firebaseConfigured ? emptyCustomer : demoCustomer);
   const [customers, setCustomers] = useLocalState("coachflow_customers", firebaseConfigured ? [] : demoCustomers);
   const [program, setProgram] = useState(demoProgram);
   const [authMode, setAuthMode] = useState(null);
+  const [authPageMode, setAuthPageMode] = useState("login");
   const [toast, setToast] = useState("");
   const [welcomePopup, setWelcomePopup] = useState(false);
   const authFlowRef = useRef(null);
@@ -223,11 +227,22 @@ function App() {
   };
 
   const go = (p) => {
+    if (p === "login") setAuthPageMode("login");
+    if (p === "signup") {
+      setAuthPageMode("signup");
+      setPage("login");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setPage(p);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const openDashboardSection = (section) => {
+    if (section === "profile") {
+      go("profile");
+      return;
+    }
     setDashboardSection(section);
     go("dashboard");
   };
@@ -379,6 +394,7 @@ function App() {
             package: String(form.package || "").trim()
           };
           await set(profileRef, profile);
+          void notifySignup(profile);
           setCustomer(profile);
           setWelcomePopup(true);
         } else {
@@ -418,7 +434,10 @@ function App() {
       setCustomers(prev => prev.some(x => x.email?.toLowerCase() === email) ? prev : [...prev, profile]);
       setAuthMode(null);
       go("dashboard");
-      if (mode === "signup") setWelcomePopup(true);
+      if (mode === "signup") {
+        void notifySignup(profile);
+        setWelcomePopup(true);
+      }
       notify(mode === "signup" ? "Account created successfully." : "Welcome back.");
     } catch (e) {
       authFlowRef.current = null;
@@ -473,7 +492,14 @@ function App() {
       await resetPassword(email.trim().toLowerCase());
       notify("Password reset email sent.");
     } catch (e) {
-      notify(e?.code === "auth/user-not-found" ? "No account found for this email." : e?.message || "Could not send reset email.");
+      const msg = e?.code === "auth/user-not-found" ? "No account found for this email."
+        : e?.code === "auth/invalid-email" || e?.code === "auth/missing-email" ? "Please enter a valid email address."
+          : e?.code === "auth/operation-not-allowed" ? "Email/password sign-in is disabled in Firebase Authentication."
+            : e?.code === "auth/too-many-requests" ? "Too many reset requests. Try again later."
+              : e?.code === "auth/network-request-failed" ? "Network error. Check your internet connection."
+                : e?.message || "Could not send reset email.";
+      console.error("Password reset failed", e);
+      notify(msg);
     }
   }
 
@@ -493,12 +519,14 @@ function App() {
   return (
     <div className="app">
       <Nav page={page} go={go} isCustomer={isCustomer} isAdmin={isAdmin} logout={handleLogout} />
+      {isCustomer && ["dashboard", "profile"].includes(page) && <CustomerBar activeSection={page === "profile" ? "profile" : dashboardSection} openSection={openDashboardSection} unreadCount={customerUnreadCount} />}
       <AnimatePresence mode="wait">
         {page === "home" && <Home key="home" go={go} />}
-        {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} go={go} initialSection={dashboardSection} />}
+        {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} go={go} initialSection={dashboardSection} openDashboardSection={openDashboardSection} setUnreadCount={setCustomerUnreadCount} />}
         {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} go={go} openDashboardSection={openDashboardSection} />}
         {page === "admin" && isAdmin && <Admin key="admin" customers={customers} setCustomers={setCustomers} program={program} setProgram={setProgram} notify={notify} />}
-        {page === "login" && <Auth key="login" mode="login" onSubmit={(f) => handleAuth("login", f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthMode("signup")} />}
+        {page === "login" && <Auth key={authPageMode} mode={authPageMode} onSubmit={(f) => handleAuth(authPageMode, f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthPageMode(authPageMode === "login" ? "signup" : "login")} />}
+        {page === "reset-password" && <ResetPasswordPage code={resetCode} notify={notify} go={go} />}
       </AnimatePresence>
       <AnimatePresence>
         {authMode && <AuthOverlay mode={authMode} close={() => setAuthMode(null)} onSubmit={(f) => handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthMode(authMode === "login" ? "signup" : "login")} />}
@@ -516,8 +544,7 @@ function App() {
             >
               <button className="welcome-close" aria-label="Close welcome message" onClick={() => setWelcomePopup(false)}><X size={19} /></button>
               <div className="welcome-icon"><Dumbbell size={26} /></div>
-              <div className="section-label">WELCOME TO COACHRAFALIA</div>
-              <h2>Welcome to your <span>new fitness journey.</span></h2>
+              <h2 className="welcom-title">Welcome to your <span>new fitness journey.</span></h2>
               <p>Your account is ready. Your dashboard is where you'll find your workouts, meals, progress and coaching updates.</p>
               <div className="welcome-points">
                 <div><Check size={17} /><span>Personalized weekly program</span></div>
@@ -566,8 +593,26 @@ function Nav({ page, go, isCustomer, isAdmin, logout }) {
     </nav>
   </div></header>;
 }
+
+function CustomerBar({ activeSection, openSection, unreadCount = 0 }) {
+  const items = [
+    { id: "home", label: "Home", icon: LayoutDashboard },
+    { id: "workout", label: "Workout", icon: Dumbbell },
+    { id: "notifications", label: "Notifications", icon: Bell },
+    { id: "profile", label: "My profile", icon: User }
+  ];
+
+  return <nav className="customer-page-browser" aria-label="Customer sections">
+    {items.map(item => {
+      const Icon = item.icon;
+      return <motion.button key={item.id} className={activeSection === item.id ? "active" : ""} onClick={() => openSection(item.id)} whileTap={{ scale: .96 }}>
+        <Icon size={17} /> <span>{item.label}</span>{item.id === "notifications" && unreadCount > 0 && <b>{unreadCount > 9 ? "9+" : unreadCount}</b>}
+      </motion.button>;
+    })}
+  </nav>;
+}
+
 function Home({ go }) {
-  const [certificateImage, setCertificateImage] = useState("");
   const packs = [
     { name: "Basic", price: "1000MAD", desc: "1 To 1 At Gym Metroflex.", items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
     { name: "Transformation", price: "1200MAD", desc: "1 To 1 In Your Home Or Your Gym", popular: true, items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
@@ -579,19 +624,6 @@ function Home({ go }) {
     ["Walid R.", "The weekly dashboard keeps me accountable every single day.", "5.0"]
   ];
 
-  const handleCertificateUpload = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setCertificateImage(String(reader.result));
-    reader.readAsDataURL(file);
-  };
-
-
-
-  
-
-
 
   return <motion.main initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
     <section className="hero">
@@ -602,7 +634,7 @@ function Home({ go }) {
           <h1>Build the body.<br /><span>Build the life.</span></h1>
           <p className="hero-copy">Personalized training, nutrition and accountability — designed around your life, your body and your goals.</p>
           <div className="hero-actions">
-            <button className="primary-btn" onClick={() => go("login")}>
+            <button className="primary-btn" onClick={() => go("signup")}>
               Start your journey <ArrowRight size={18} />
             </button>
             <a className="video-link" href="#about">
@@ -753,15 +785,10 @@ function Home({ go }) {
         <Reveal>
           <div className="section-label">COACH CERTIFICATE</div>
           <h2>Proof behind <span>the coaching.</span></h2>
-          <p className="certificate-copy">Show clients the qualification and experience behind every personalized training plan.</p>
-          <label className="certificate-upload">
-            <span>{certificateImage ? "Replace certificate image" : "Add certificate image"}</span>
-            <input type="file" accept="image/*" onChange={handleCertificateUpload} />
-          </label>
         </Reveal>
         <Reveal delay={.15}>
           <div className="certificate-frame">
-            {certificateImage ? <img className="certificate-image" src={certificateImage} alt="Coach certificate" /> : <div className="certificate-placeholder"><div className="certificate-placeholder-mark"><Check size={28} /></div><b>Your certificate</b><span>Upload an image to display it here</span></div>}
+            <img className="certificate-image" src={`${import.meta.env.BASE_URL}certificate.jpg`} alt="Coach certificate" />
           </div>
         </Reveal>
       </div>
@@ -771,16 +798,16 @@ function Home({ go }) {
       {[["01", "TRAINING", "Structured workouts built for your goal, experience and available equipment.", Dumbbell], ["02", "NUTRITION", "Simple meal guidance and personalized plans you can actually follow.", Utensils], ["03", "ACCOUNTABILITY", "Regular check-ins, adjustments and direct support when you need it.", HeartPulse]].map(([n, t, d, I], i) => <Reveal delay={i * .1} key={n}><div className="service-card"><span>{n}</span><I /><h3>{t}</h3><p>{d}</p></div></Reveal>)}
     </div></div></section>
 
-    <section id="packs" className="section"><div className="container"><Reveal><div className="section-label">03 — COACHING PACKS</div><h2>Choose your <span>commitment.</span></h2></Reveal><div className="pack-grid">{packs.map((p, i) => <Reveal delay={i * .1} key={p.name}><div className={"pack " + (p.popular ? "featured" : "")}>{p.popular && <div className="popular">MOST POPULAR</div>}<h3>{p.name}</h3><p>{p.desc}</p><div className="price">{p.price}<small>/{p.month} month</small></div><div className="pack-items">{p.items.map(x => <span key={x}><Check size={16} />{x}</span>)}</div><button className={p.popular ? "primary-btn" : "outline-dark"} onClick={() => go("login")}>Get started <ArrowRight size={16} /></button></div></Reveal>)}</div></div></section>
+    <section id="packs" className="section"><div className="container"><Reveal><div className="section-label">03 — COACHING PACKS</div><h2>Choose your <span>commitment.</span></h2></Reveal><div className="pack-grid">{packs.map((p, i) => <Reveal delay={i * .1} key={p.name}><div className={"pack " + (p.popular ? "featured" : "")}>{p.popular && <div className="popular">MOST POPULAR</div>}<h3>{p.name}</h3><p>{p.desc}</p><div className="price">{p.price}<small>/{p.month} month</small></div><div className="pack-items">{p.items.map(x => <span key={x}><Check size={16} />{x}</span>)}</div><button className={p.popular ? "primary-btn" : "outline-dark"} onClick={() => go("signup")}>Get started <ArrowRight size={16} /></button></div></Reveal>)}</div></div></section>
 
     <section id="reviews" className="section reviews"><div className="container"><Reveal><div className="section-label">04 — CLIENT RESULTS</div><h2>Real people. <span>Real change.</span></h2></Reveal><div className="review-grid">{reviews.map(([name, text, score], i) => <Reveal delay={i * .1} key={name}><div className="review"><div className="stars">{[1, 2, 3, 4, 5].map(x => <Star key={x} size={16} fill="currentColor" />)}</div><p>“{text}”</p><div className="reviewer"><div>{name[0]}</div><span><b>{name}</b><small>Verified client</small></span></div></div></Reveal>)}</div></div></section>
-    <section className="cta"><div className="container cta-inner"><Reveal><div><div className="section-label">READY?</div><h2>Your next chapter starts <span>today.</span></h2></div><button className="primary-btn" onClick={() => go("login")}>Join the coaching <ArrowRight /></button></Reveal></div></section>
+    <section className="cta"><div className="container cta-inner"><Reveal><div><div className="section-label">READY?</div><h2>Your next chapter starts <span>today.</span></h2></div><button className="primary-btn" onClick={() => go("signup")}>Join the coaching <ArrowRight /></button></Reveal></div></section>
   </motion.main>
 }
 
-function Dashboard({ customer, program, go, initialSection = "home" }) {
+function Dashboard({ customer, program, go, initialSection = "home", openDashboardSection, setUnreadCount }) {
   const [selected, setSelected] = useState("Monday");
-  const [activeSection, setActiveSection] = useState(initialSection);
+  const activeSection = initialSection;
   const [notifications, setNotifications] = useState([]);
   const d = normalizeDay(program?.[selected]);
   const progress = packageProgress(customer.startDate, customer.endDate);
@@ -807,6 +834,10 @@ function Dashboard({ customer, program, go, initialSection = "home" }) {
   const visibleNotifications = packageNotification ? [packageNotification, ...notifications] : notifications;
   const unreadCount = visibleNotifications.filter(n => !n.read).length;
 
+  useEffect(() => {
+    setUnreadCount(unreadCount);
+  }, [setUnreadCount, unreadCount]);
+
   const markRead = async (id) => {
     if (!firebaseConfigured || !db || id.startsWith("package-")) return;
     try { await update(ref(db, `notifications/${auth.currentUser.uid}/${id}`), { read: true }); } catch (e) { console.error(e); }
@@ -826,7 +857,7 @@ function Dashboard({ customer, program, go, initialSection = "home" }) {
       go("profile");
       return;
     }
-    setActiveSection(section);
+    openDashboardSection(section);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -844,20 +875,11 @@ function Dashboard({ customer, program, go, initialSection = "home" }) {
     </div>
   );
 
-  return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+  return <motion.main className="page customer-page-with-bar" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
     <div className="container">
       <div className="dash-head">
         <div><div className="section-label">CLIENT DASHBOARD</div><h1>Good morning, <span>{firstName}.</span></h1><p>Stay consistent. Small actions, big results.</p></div>
       </div>
-
-      <nav className="customer-page-browser" aria-label="Customer dashboard sections">
-        {[{ id: "home", label: "Home", icon: LayoutDashboard }, { id: "workout", label: "Workout", icon: Dumbbell }, { id: "notifications", label: "Notifications", icon: Bell }, { id: "profile", label: "My profile", icon: User }].map(item => {
-          const Icon = item.icon;
-          return <motion.button key={item.id} className={activeSection === item.id ? "active" : ""} onClick={() => openSection(item.id)} whileTap={{ scale: .96 }}>
-            <Icon size={17} /> <span>{item.label}</span>{item.id === "notifications" && unreadCount > 0 && <b>{unreadCount > 9 ? "9+" : unreadCount}</b>}
-          </motion.button>;
-        })}
-      </nav>
 
       <AnimatePresence mode="wait">
         {activeSection === "home" && <motion.section key="customer-home" className="customer-browser-view" initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 18 }} transition={{ duration: .2 }}>
@@ -907,14 +929,8 @@ function Profile({ customer, setCustomer, notify, go, openDashboardSection }) {
     }
   };
   const fields = [["name", "Full name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height (cm)"], ["weight", "Weight (kg)"], ["goal", "Main goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health / medical notes"]];
-  return <motion.main className="page" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
+  return <motion.main className="page customer-page-with-bar" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
     <div className="container narrow">
-      <nav className="customer-page-browser" aria-label="Customer sections">
-        <motion.button onClick={() => openDashboardSection("home")} whileTap={{ scale: .96 }}><LayoutDashboard size={17} /><span>Home</span></motion.button>
-        <motion.button onClick={() => openDashboardSection("workout")} whileTap={{ scale: .96 }}><Dumbbell size={17} /><span>Workout</span></motion.button>
-        <motion.button onClick={() => openDashboardSection("notifications")} whileTap={{ scale: .96 }}><Bell size={17} /><span>Notifications</span></motion.button>
-        <motion.button className="active" aria-current="page" whileTap={{ scale: .96 }}><User size={17} /><span>My profile</span></motion.button>
-      </nav>
       <div className="page-heading">
         <div className="section-label">
         MY PROFILE
@@ -1322,6 +1338,40 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
   </div></motion.main>;
 }
 function AuthOverlay({ mode, close, onSubmit, onGoogle, onReset, switchMode }) { return <div className="overlay"><button className="overlay-close" onClick={close}><X /></button><Auth mode={mode} onSubmit={onSubmit} onGoogle={onGoogle} onReset={onReset} switchMode={switchMode} /></div>; }
+function ResetPasswordPage({ code, notify, go }) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!code) return notify("This password reset link is missing or invalid.");
+    if (password.length < 6) return notify("Password must be at least 6 characters.");
+    if (password !== confirmPassword) return notify("Passwords do not match.");
+    setSaving(true);
+    try {
+      await confirmResetPassword(code, password);
+      notify("Password updated. You can sign in now.");
+      go("login");
+    } catch (error) {
+      notify(error?.code === "auth/expired-action-code" ? "This reset link has expired. Request a new one." : "This reset link is invalid or already used.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <motion.main className="auth-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <div className="auth-box reset-box">
+      <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
+      <div className="section-label">ACCOUNT SECURITY</div>
+      <h1>Set a new <span>password.</span></h1>
+      <p>Choose a new password for your coaching account.</p>
+      <label>New password<input type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="At least 6 characters" /></label>
+      <label>Confirm password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} placeholder="Repeat your password" /></label>
+      <button className="primary-btn full" onClick={submit} disabled={saving}>{saving ? "Updating…" : "Update password"} <ArrowRight size={17} /></button>
+      <button className="forgot-btn" onClick={() => go("login")}>Return to sign in</button>
+    </div>
+  </motion.main>;
+}
 function AnimatedNumber({ value, decimals = 0, suffix = "" }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, amount: .6 });
@@ -1352,7 +1402,7 @@ function Footer() { return <footer>
           <a target="_blank" href='https://www.instagram.com/the_wolf_zakaria?stkn=MThnMnU1a2xnb2lmcg=='>
           <span className="social"><i class="fa-brands fa-instagram"></i></span>
           </a>
-          <a target="_blank" href='https://wa.me/212637023780?text=Hello%20Coach%20Im%20interested'>
+          <a target="_blank" href='https://wa.me/212681197174?text=Hello%20Coach%20Im%20interested'>
           <span className="social"><i class="fa-brands fa-whatsapp"></i></span>
           </a>
           <a target="_blank" href='https://maps.app.goo.gl/ckytLd6RMss1KSoJA'>
