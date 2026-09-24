@@ -220,6 +220,7 @@ function App() {
   const [authMode, setAuthMode] = useState(null);
   const [authPageMode, setAuthPageMode] = useState("login");
   const [toast, setToast] = useState("");
+  const [forgotEmail, setForgotEmail] = useState("");
   const [welcomePopup, setWelcomePopup] = useState(false);
   const authFlowRef = useRef(null);
 
@@ -487,12 +488,18 @@ function App() {
     }
   }
 
+  function goForgotPassword(email) {
+    setForgotEmail(email || "");
+    go("forgot-password");
+  }
+
   async function handleReset(email) {
     try {
       if (!firebaseConfigured) throw new Error("Password reset requires Firebase.");
       if (!email?.trim()) throw new Error("Enter your email first.");
       await resetPassword(email.trim().toLowerCase());
-      notify("Password reset email sent.");
+      notify("Reset code sent to your email.");
+      go("reset-password");
     } catch (e) {
       const msg = e?.code === "auth/user-not-found" ? "No account found for this email."
         : e?.code === "auth/invalid-email" || e?.code === "auth/missing-email" ? "Please enter a valid email address."
@@ -527,11 +534,12 @@ function App() {
         {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} go={go} initialSection={dashboardSection} openDashboardSection={openDashboardSection} setUnreadCount={setCustomerUnreadCount} />}
         {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} go={go} openDashboardSection={openDashboardSection} />}
         {page === "admin" && isAdmin && <Admin key="admin" customers={customers} setCustomers={setCustomers} program={program} setProgram={setProgram} notify={notify} />}
-        {page === "login" && <Auth key={authPageMode} mode={authPageMode} onSubmit={(f) => handleAuth(authPageMode, f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthPageMode(authPageMode === "login" ? "signup" : "login")} />}
-        {page === "reset-password" && <ResetPasswordPage code={resetCode} notify={notify} go={go} />}
+        {page === "login" && <Auth key={authPageMode} mode={authPageMode} onSubmit={(f) => handleAuth(authPageMode, f)} onGoogle={handleGoogle} onReset={goForgotPassword} switchMode={() => setAuthPageMode(authPageMode === "login" ? "signup" : "login")} />}
+        {page === "forgot-password" && <ForgotPasswordPage key="forgot-password" initialEmail={forgotEmail} onReset={handleReset} notify={notify} go={go} />}
+        {page === "reset-password" && <ResetPasswordPage key="reset-password" code={resetCode} notify={notify} go={go} />}
       </AnimatePresence>
       <AnimatePresence>
-        {authMode && <AuthOverlay mode={authMode} close={() => setAuthMode(null)} onSubmit={(f) => handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={handleReset} switchMode={() => setAuthMode(authMode === "login" ? "signup" : "login")} />}
+        {authMode && <AuthOverlay mode={authMode} close={() => setAuthMode(null)} onSubmit={(f) => handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={(email) => { setAuthMode(null); goForgotPassword(email); }} switchMode={() => setAuthMode(authMode === "login" ? "signup" : "login")} />}
       </AnimatePresence>
       <AnimatePresence>{toast && <Toast message={toast} />}</AnimatePresence>
       <AnimatePresence>
@@ -1340,29 +1348,93 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
   </div></motion.main>;
 }
 function AuthOverlay({ mode, close, onSubmit, onGoogle, onReset, switchMode }) { return <div className="overlay"><button className="overlay-close" onClick={close}><X /></button><Auth mode={mode} onSubmit={onSubmit} onGoogle={onGoogle} onReset={onReset} switchMode={switchMode} /></div>; }
+// Accepts either a raw oobCode or a full reset link pasted from the email,
+// and pulls the oobCode out of it either way.
+function extractOobCode(input) {
+  const trimmed = (input || "").trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    const fromUrl = url.searchParams.get("oobCode");
+    if (fromUrl) return fromUrl;
+  } catch {
+    // Not a full URL — fall through and treat it as a raw code.
+  }
+  return trimmed;
+}
+
+function ForgotPasswordPage({ initialEmail, onReset, notify, go }) {
+  const [email, setEmail] = useState(initialEmail || "");
+  const [sending, setSending] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!email.trim()) return notify("Enter your email address.");
+    setSending(true);
+    try {
+      await onReset(email);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return <motion.main className="auth-page reset-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <motion.div
+      className="reset-shell"
+      initial={{ opacity: 0, y: 24, scale: .98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: .45, ease: "easeOut" }}
+    >
+      <div className="reset-glow reset-glow-one" />
+      <div className="reset-glow reset-glow-two" />
+
+      <div className="reset-card">
+        <div className="reset-brand">
+          <div className="reset-brand-mark"><ShieldCheck size={22} /></div>
+          <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
+        </div>
+
+        <form className="reset-form" onSubmit={submit}>
+          <div className="section-label">ACCOUNT SECURITY</div>
+          <h1>Forgot your <span>password?</span></h1>
+          <p className="reset-intro">Enter the email on your account and we'll send you a reset code.</p>
+
+          <label>Email
+            <div className="reset-input-wrap">
+              <input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" autoFocus />
+            </div>
+          </label>
+
+          <button className="primary-btn full reset-submit" type="submit" disabled={sending}>{sending ? "Sending…" : "Send reset code"} <ArrowRight size={17} /></button>
+          <button className="forgot-btn reset-secondary" type="button" onClick={() => go("login")}>Return to sign in</button>
+        </form>
+      </div>
+    </motion.div>
+  </motion.main>;
+}
 function ResetPasswordPage({ code, notify, go }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!code);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [invalid, setInvalid] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [resolvedCode, setResolvedCode] = useState(code || "");
+  const [manualInput, setManualInput] = useState("");
+  const [checkingManual, setCheckingManual] = useState(false);
 
   useEffect(() => {
     let active = true;
     async function checkCode() {
-      if (!code) {
-        if (active) {
-          setInvalid(true);
-          setLoading(false);
-        }
+      if (!resolvedCode) {
+        if (active) setLoading(false);
         return;
       }
       try {
-        const email = await verifyResetPasswordCode(code);
+        const email = await verifyResetPasswordCode(resolvedCode);
         if (active) {
           setAccountEmail(email || "");
           setInvalid(false);
@@ -1377,7 +1449,18 @@ function ResetPasswordPage({ code, notify, go }) {
     }
     checkCode();
     return () => { active = false; };
-  }, [code]);
+  }, [resolvedCode]);
+
+  const submitManualCode = async (event) => {
+    event.preventDefault();
+    const extracted = extractOobCode(manualInput);
+    if (!extracted) return notify("Paste the reset code or the link from your email.");
+    setCheckingManual(true);
+    setLoading(true);
+    setInvalid(false);
+    setResolvedCode(extracted);
+    setCheckingManual(false);
+  };
 
   const strength = password.length === 0 ? 0 : password.length < 6 ? 1 : password.length < 10 ? 2 : 3;
   const strengthLabel = ["", "Too short", "Good", "Strong"][strength];
@@ -1385,12 +1468,12 @@ function ResetPasswordPage({ code, notify, go }) {
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!code) return notify("This password reset link is missing or invalid.");
+    if (!resolvedCode) return notify("This password reset link is missing or invalid.");
     if (password.length < 6) return notify("Password must be at least 6 characters.");
     if (password !== confirmPassword) return notify("Passwords do not match.");
     setSaving(true);
     try {
-      await confirmResetPassword(code, password);
+      await confirmResetPassword(resolvedCode, password);
       setSuccess(true);
       notify("Password updated successfully.");
     } catch (error) {
@@ -1422,7 +1505,20 @@ function ResetPasswordPage({ code, notify, go }) {
           <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
         </div>
 
-        {loading ? <div className="reset-state">
+        {!resolvedCode && !loading ? <form className="reset-form" onSubmit={submitManualCode}>
+          <div className="section-label">ACCOUNT SECURITY</div>
+          <h1>Enter your reset <span>code.</span></h1>
+          <p className="reset-intro">Open the password reset email we sent you and paste the code, or the whole link, below.</p>
+
+          <label>Reset code or link
+            <div className="reset-input-wrap">
+              <input type="text" autoComplete="off" value={manualInput} onChange={event => setManualInput(event.target.value)} placeholder="Paste code or link from your email" autoFocus />
+            </div>
+          </label>
+
+          <button className="primary-btn full reset-submit" type="submit" disabled={checkingManual}>{checkingManual ? "Checking…" : "Continue"} <ArrowRight size={17} /></button>
+          <button className="forgot-btn reset-secondary" type="button" onClick={() => go("login")}>Return to sign in</button>
+        </form> : loading ? <div className="reset-state">
           <motion.div className="reset-loader" animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
           <h1>Checking your link<span>.</span></h1>
           <p>We are securely validating your password reset request.</p>
@@ -1432,7 +1528,7 @@ function ResetPasswordPage({ code, notify, go }) {
           <h1>This link is no longer <span>valid.</span></h1>
           <p>The password reset link may have expired, already been used, or be incomplete.</p>
           <button className="primary-btn full" onClick={() => go("login")}>Back to sign in <ArrowRight size={17} /></button>
-          <button className="forgot-btn reset-secondary" onClick={() => go("login")}>Request a new reset email</button>
+          <button className="forgot-btn reset-secondary" onClick={() => go("forgot-password")}>Request a new reset email</button>
         </div> : success ? <motion.div className="reset-state" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <motion.div className="reset-state-icon success" initial={{ scale: .7 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300 }}><CheckCircle2 size={30} /></motion.div>
           <div className="section-label">ALL SET</div>
