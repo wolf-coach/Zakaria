@@ -1,6 +1,6 @@
 /**
  * CoachFlow – new signup → Telegram notifier
- * Account used Dinkhir
+ * Account used Dinkhir on Google Apps Script
  * Runs entirely on Google Apps Script (free, no Google Cloud billing needed).
  * The React app POSTs the signup profile here; this script formats it and
  * sends it to your Telegram bot. The bot token never touches the browser.
