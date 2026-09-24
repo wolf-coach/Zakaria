@@ -5,10 +5,7 @@ import {
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signOut,
-  sendPasswordResetEmail,
-  verifyPasswordResetCode,
-  confirmPasswordReset
+  signOut
 } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 
@@ -24,6 +21,11 @@ const firebaseConfig = {
 };
 
 export const firebaseConfigured = Object.values(firebaseConfig).every(Boolean);
+
+// Paste the two Trigger URLs you get after deploying the functions in the
+// Google Cloud Console (Cloud Functions -> your function -> "Trigger" tab).
+const REQUEST_RESET_URL = "https://REPLACE-WITH-YOUR-requestPasswordReset-URL";
+const CONFIRM_RESET_URL = "https://REPLACE-WITH-YOUR-confirmPasswordReset-URL";
 
 let app, auth, db;
 if (firebaseConfigured) {
@@ -46,21 +48,35 @@ export async function loginGoogle() {
   if (!firebaseConfigured) return null;
   return signInWithPopup(auth, new GoogleAuthProvider());
 }
-export async function resetPassword(email) {
-  if (!firebaseConfigured) return null;
-  return sendPasswordResetEmail(auth, email, {
-    url: `${window.location.origin}${import.meta.env.BASE_URL}reset-password`,
-    handleCodeInApp: true
+
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
   });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data?.error || "Request failed.");
+    error.status = response.status;
+    throw error;
+  }
+  return data;
 }
-export async function verifyResetPasswordCode(code) {
+
+// Sends a 6-digit code by email via the requestPasswordReset Cloud Function.
+export async function requestPasswordResetCode(email) {
   if (!firebaseConfigured) return null;
-  return verifyPasswordResetCode(auth, code);
+  return postJson(REQUEST_RESET_URL, { email });
 }
-export async function confirmResetPassword(code, password) {
+
+// Verifies the 6-digit code and sets the new password via the
+// confirmPasswordReset Cloud Function.
+export async function confirmPasswordResetCode(email, code, newPassword) {
   if (!firebaseConfigured) return null;
-  return confirmPasswordReset(auth, code, password);
+  return postJson(CONFIRM_RESET_URL, { email, code, newPassword });
 }
+
 export async function logoutFirebase() {
   if (firebaseConfigured) await signOut(auth);
 }
