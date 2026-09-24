@@ -23,7 +23,7 @@ import Img4 from "./data/img4.jpeg";
 
 import { Autoplay, Navigation } from "swiper/modules";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, requestPasswordResetCode, confirmPasswordResetCode } from "./lib/firebase";
+import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword, verifyResetPasswordCode, confirmResetPassword } from "./lib/firebase";
 import { ref, get, set, update, remove, onValue } from "firebase/database";
 import { notifySignup } from "./lib/telegram";
 
@@ -206,7 +206,10 @@ function useLocalState(key, initial) {
 }
 
 function App() {
-  const [page, setPage] = useState("home");
+  const resetParams = new URLSearchParams(window.location.search);
+  const resetCode = resetParams.get("oobCode");
+  const resetMode = resetParams.get("mode");
+  const [page, setPage] = useState(() => (resetCode || resetMode === "resetPassword") ? "reset-password" : "home");
   const [dashboardSection, setDashboardSection] = useState("home");
   const [customerUnreadCount, setCustomerUnreadCount] = useState(0);
   const [user, setUser] = useState(null);
@@ -218,7 +221,6 @@ function App() {
   const [authPageMode, setAuthPageMode] = useState("login");
   const [toast, setToast] = useState("");
   const [forgotEmail, setForgotEmail] = useState("");
-  const [resetEmailPending, setResetEmailPending] = useState("");
   const [welcomePopup, setWelcomePopup] = useState(false);
   const authFlowRef = useRef(null);
 
@@ -492,17 +494,20 @@ function App() {
   }
 
   async function handleReset(email) {
-    const cleanEmail = (email || "").trim().toLowerCase();
     try {
       if (!firebaseConfigured) throw new Error("Password reset requires Firebase.");
-      if (!cleanEmail) throw new Error("Enter your email first.");
-      await requestPasswordResetCode(cleanEmail);
-      notify("If that email has an account, a 6-digit code was sent.");
-      setResetEmailPending(cleanEmail);
+      if (!email?.trim()) throw new Error("Enter your email first.");
+      await resetPassword(email.trim().toLowerCase());
+      notify("Reset code sent to your email.");
       go("reset-password");
     } catch (e) {
-      const msg = e?.message || "Could not send reset code.";
-      console.error("Password reset request failed", e);
+      const msg = e?.code === "auth/user-not-found" ? "No account found for this email."
+        : e?.code === "auth/invalid-email" || e?.code === "auth/missing-email" ? "Please enter a valid email address."
+          : e?.code === "auth/operation-not-allowed" ? "Email/password sign-in is disabled in Firebase Authentication."
+            : e?.code === "auth/too-many-requests" ? "Too many reset requests. Try again later."
+              : e?.code === "auth/network-request-failed" ? "Network error. Check your internet connection."
+                : e?.message || "Could not send reset email.";
+      console.error("Password reset failed", e);
       notify(msg);
     }
   }
@@ -531,7 +536,7 @@ function App() {
         {page === "admin" && isAdmin && <Admin key="admin" customers={customers} setCustomers={setCustomers} program={program} setProgram={setProgram} notify={notify} />}
         {page === "login" && <Auth key={authPageMode} mode={authPageMode} onSubmit={(f) => handleAuth(authPageMode, f)} onGoogle={handleGoogle} onReset={goForgotPassword} switchMode={() => setAuthPageMode(authPageMode === "login" ? "signup" : "login")} />}
         {page === "forgot-password" && <ForgotPasswordPage key="forgot-password" initialEmail={forgotEmail} onReset={handleReset} notify={notify} go={go} />}
-        {page === "reset-password" && <ResetPasswordPage key="reset-password" email={resetEmailPending} notify={notify} go={go} onResend={handleReset} />}
+        {page === "reset-password" && <ResetPasswordPage key="reset-password" code={resetCode} notify={notify} go={go} />}
       </AnimatePresence>
       <AnimatePresence>
         {authMode && <AuthOverlay mode={authMode} close={() => setAuthMode(null)} onSubmit={(f) => handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={(email) => { setAuthMode(null); goForgotPassword(email); }} switchMode={() => setAuthMode(authMode === "login" ? "signup" : "login")} />}
@@ -1343,6 +1348,21 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
   </div></motion.main>;
 }
 function AuthOverlay({ mode, close, onSubmit, onGoogle, onReset, switchMode }) { return <div className="overlay"><button className="overlay-close" onClick={close}><X /></button><Auth mode={mode} onSubmit={onSubmit} onGoogle={onGoogle} onReset={onReset} switchMode={switchMode} /></div>; }
+// Accepts either a raw oobCode or a full reset link pasted from the email,
+// and pulls the oobCode out of it either way.
+function extractOobCode(input) {
+  const trimmed = (input || "").trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    const fromUrl = url.searchParams.get("oobCode");
+    if (fromUrl) return fromUrl;
+  } catch {
+    // Not a full URL — fall through and treat it as a raw code.
+  }
+  return trimmed;
+}
+
 function ForgotPasswordPage({ initialEmail, onReset, notify, go }) {
   const [email, setEmail] = useState(initialEmail || "");
   const [sending, setSending] = useState(false);
@@ -1392,18 +1412,55 @@ function ForgotPasswordPage({ initialEmail, onReset, notify, go }) {
     </motion.div>
   </motion.main>;
 }
-function ResetPasswordPage({ email, notify, go, onResend }) {
-  const [emailInput, setEmailInput] = useState(email || "");
-  const [code, setCode] = useState("");
+function ResetPasswordPage({ code, notify, go }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [loading, setLoading] = useState(!!code);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [invalid, setInvalid] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [resending, setResending] = useState(false);
+  const [resolvedCode, setResolvedCode] = useState(code || "");
+  const [manualInput, setManualInput] = useState("");
+  const [checkingManual, setCheckingManual] = useState(false);
 
-  useEffect(() => { setEmailInput(email || ""); }, [email]);
+  useEffect(() => {
+    let active = true;
+    async function checkCode() {
+      if (!resolvedCode) {
+        if (active) setLoading(false);
+        return;
+      }
+      try {
+        const email = await verifyResetPasswordCode(resolvedCode);
+        if (active) {
+          setAccountEmail(email || "");
+          setInvalid(false);
+          setLoading(false);
+        }
+      } catch {
+        if (active) {
+          setInvalid(true);
+          setLoading(false);
+        }
+      }
+    }
+    checkCode();
+    return () => { active = false; };
+  }, [resolvedCode]);
+
+  const submitManualCode = async (event) => {
+    event.preventDefault();
+    const extracted = extractOobCode(manualInput);
+    if (!extracted) return notify("Paste the reset code or the link from your email.");
+    setCheckingManual(true);
+    setLoading(true);
+    setInvalid(false);
+    setResolvedCode(extracted);
+    setCheckingManual(false);
+  };
 
   const strength = password.length === 0 ? 0 : password.length < 6 ? 1 : password.length < 10 ? 2 : 3;
   const strengthLabel = ["", "Too short", "Good", "Strong"][strength];
@@ -1411,33 +1468,24 @@ function ResetPasswordPage({ email, notify, go, onResend }) {
 
   const submit = async (event) => {
     event.preventDefault();
-    const cleanEmail = emailInput.trim().toLowerCase();
-    const cleanCode = code.trim();
-    if (!cleanEmail) return notify("Enter the email on your account.");
-    if (!/^\d{6}$/.test(cleanCode)) return notify("Enter the 6-digit code from your email.");
+    if (!resolvedCode) return notify("This password reset link is missing or invalid.");
     if (password.length < 6) return notify("Password must be at least 6 characters.");
     if (password !== confirmPassword) return notify("Passwords do not match.");
     setSaving(true);
     try {
-      await confirmPasswordResetCode(cleanEmail, cleanCode, password);
+      await confirmResetPassword(resolvedCode, password);
       setSuccess(true);
       notify("Password updated successfully.");
     } catch (error) {
-      const message = error?.message || "Could not reset your password. Please try again.";
+      const message = error?.code === "auth/expired-action-code"
+        ? "This reset link has expired. Request a new one."
+        : error?.code === "auth/weak-password"
+          ? "Please choose a stronger password."
+          : "This reset link is invalid or already used.";
       notify(message);
+      if (error?.code === "auth/expired-action-code" || error?.code === "auth/invalid-action-code") setInvalid(true);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const resend = async () => {
-    const cleanEmail = emailInput.trim().toLowerCase();
-    if (!cleanEmail) return notify("Enter the email on your account first.");
-    setResending(true);
-    try {
-      await onResend(cleanEmail);
-    } finally {
-      setResending(false);
     }
   };
 
@@ -1457,7 +1505,31 @@ function ResetPasswordPage({ email, notify, go, onResend }) {
           <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
         </div>
 
-        {success ? <motion.div className="reset-state" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        {!resolvedCode && !loading ? <form className="reset-form" onSubmit={submitManualCode}>
+          <div className="section-label">ACCOUNT SECURITY</div>
+          <h1>Enter your reset <span>code.</span></h1>
+          <p className="reset-intro">Open the password reset email we sent you and paste the code, or the whole link, below.</p>
+
+          <label>Reset code or link
+            <div className="reset-input-wrap">
+              <input type="text" autoComplete="off" value={manualInput} onChange={event => setManualInput(event.target.value)} placeholder="Paste code or link from your email" autoFocus />
+            </div>
+          </label>
+
+          <button className="primary-btn full reset-submit" type="submit" disabled={checkingManual}>{checkingManual ? "Checking…" : "Continue"} <ArrowRight size={17} /></button>
+          <button className="forgot-btn reset-secondary" type="button" onClick={() => go("login")}>Return to sign in</button>
+        </form> : loading ? <div className="reset-state">
+          <motion.div className="reset-loader" animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
+          <h1>Checking your link<span>.</span></h1>
+          <p>We are securely validating your password reset request.</p>
+        </div> : invalid ? <div className="reset-state">
+          <div className="reset-state-icon error"><X size={28} /></div>
+          <div className="section-label">RESET LINK</div>
+          <h1>This link is no longer <span>valid.</span></h1>
+          <p>The password reset link may have expired, already been used, or be incomplete.</p>
+          <button className="primary-btn full" onClick={() => go("login")}>Back to sign in <ArrowRight size={17} /></button>
+          <button className="forgot-btn reset-secondary" onClick={() => go("forgot-password")}>Request a new reset email</button>
+        </div> : success ? <motion.div className="reset-state" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <motion.div className="reset-state-icon success" initial={{ scale: .7 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300 }}><CheckCircle2 size={30} /></motion.div>
           <div className="section-label">ALL SET</div>
           <h1>Your password is <span>updated.</span></h1>
@@ -1465,27 +1537,17 @@ function ResetPasswordPage({ email, notify, go, onResend }) {
           <button className="primary-btn full" onClick={() => go("login")}>Continue to sign in <ArrowRight size={17} /></button>
         </motion.div> : <form className="reset-form" onSubmit={submit}>
           <div className="section-label">ACCOUNT SECURITY</div>
-          <h1>Enter your <span>code.</span></h1>
-          <p className="reset-intro">Check your email for the 6-digit code we sent, then set a new password below.</p>
+          <h1>Set a new <span>password.</span></h1>
+          <p className="reset-intro">Create a new password for your coaching account.</p>
 
-          {email ? <div className="reset-account">
+          {accountEmail && <div className="reset-account">
             <span className="reset-account-dot" />
-            <div><small>Resetting password for</small><strong>{email}</strong></div>
-          </div> : <label>Email
-            <div className="reset-input-wrap">
-              <input type="email" autoComplete="email" value={emailInput} onChange={event => setEmailInput(event.target.value)} placeholder="you@example.com" />
-            </div>
-          </label>}
-
-          <label>6-digit code
-            <div className="reset-input-wrap">
-              <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" autoFocus className="reset-code-input" />
-            </div>
-          </label>
+            <div><small>Resetting password for</small><strong>{accountEmail}</strong></div>
+          </div>}
 
           <label>New password
             <div className="reset-input-wrap">
-              <input type={showPassword ? "text" : "password"} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="At least 6 characters" />
+              <input type={showPassword ? "text" : "password"} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="At least 6 characters" autoFocus />
               <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(value => !value)}>{showPassword ? "Hide" : "Show"}</button>
             </div>
           </label>
@@ -1502,9 +1564,8 @@ function ResetPasswordPage({ email, notify, go, onResend }) {
             </div>
           </label>
 
-          <div className="reset-rules"><Check size={14} /> Minimum 6 characters <span /> <ShieldCheck size={14} /> Code expires in 10 minutes</div>
+          <div className="reset-rules"><Check size={14} /> Minimum 6 characters <span /> <ShieldCheck size={14} /> Secure reset</div>
           <button className="primary-btn full reset-submit" type="submit" disabled={saving}>{saving ? "Updating…" : "Update password"} <ArrowRight size={17} /></button>
-          <button className="forgot-btn reset-secondary" type="button" disabled={resending} onClick={resend}>{resending ? "Sending…" : "Didn't get a code? Resend"}</button>
           <button className="forgot-btn reset-secondary" type="button" onClick={() => go("login")}>Return to sign in</button>
         </form>}
       </div>
