@@ -2966,6 +2966,13 @@ footer {
   cursor: pointer;
 }
 .reset-input-wrap button:hover { color: var(--green); }
+.reset-code-input {
+  padding-right: 15px !important;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 10px;
+}
 .password-strength {
   display: flex;
   align-items: center;
