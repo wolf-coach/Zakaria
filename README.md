@@ -1,7 +1,8 @@
 # CoachFlow Coaching Platform — Firebase Customer Manager V7
-
+firebase: hedraf
+apps script: dinkhir
 ## What this version does
-
+ 
 ### V7 authentication/profile fix
 - Signup writes the complete signup form to `users/{uid}` in one Realtime Database write.
 - The Firebase auth listener no longer creates an empty customer document, preventing a race that could leave only the email saved.
