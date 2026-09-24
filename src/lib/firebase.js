@@ -50,7 +50,7 @@ export async function resetPassword(email) {
   if (!firebaseConfigured) return null;
   return sendPasswordResetEmail(auth, email, {
     url: `${window.location.origin}${import.meta.env.BASE_URL}reset-password`,
-    handleCodeInApp: false
+    handleCodeInApp: true
   });
 }
 export async function verifyResetPasswordCode(code) {
