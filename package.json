@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@motionone/utils": "^10.18.0",
+    "@number-flow/react": "^0.6.2",
     "firebase": "^12.2.1",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.468.0",

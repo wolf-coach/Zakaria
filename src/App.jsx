@@ -1,27 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence,
-  animate,
   useScroll,
   useSpring,
   useTransform,
   useMotionValue,
   useVelocity,
-  useAnimationFrame,
-  useInView } from "framer-motion";
+  useAnimationFrame } from "framer-motion";
 import { wrap } from "@motionone/utils";
 import {
-  ArrowRight, ArrowLeft, Bell, Check, ChevronDown, ChevronRight, Dumbbell, Flame, HeartPulse, Instagram, Package as PackageIcon, Trash2,
+  ArrowRight, ArrowLeft, ArrowLeftRight, Bell, Check, ChevronDown, ChevronRight, Dumbbell, Flame, HeartPulse, Home as HomeIcon, Instagram, Package as PackageIcon, Trash2,
   LayoutDashboard, LogIn, LogOut, Menu, Play, Plus, ShieldCheck, Star, Search,
   Target, User, Users, Utensils, X, CalendarDays, Clock3, Save, CheckCircle2, AlertTriangle, Send, Phone
 } from "lucide-react";
+import NumberFlow from "@number-flow/react";
 import { Swiper, SwiperSlide } from "swiper/react"; 
 import "swiper/css";
-import Img1 from "./data/img1.jpeg";
-import Img2 from "./data/img2.jpeg";
-import Img3 from "./data/img3.jpeg";
-import Img4 from "./data/img4.jpeg";
+import BeforeImage from "./data/before.png";
+import AfterImage from "./data/after.png";
 
-import { Autoplay, Navigation } from "swiper/modules";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword, verifyResetPasswordCode, confirmResetPassword } from "./lib/firebase";
 import { ref, get, set, update, remove, onValue } from "firebase/database";
@@ -538,6 +534,7 @@ function App() {
         {page === "forgot-password" && <ForgotPasswordPage key="forgot-password" initialEmail={forgotEmail} onReset={handleReset} notify={notify} go={go} />}
         {page === "reset-password" && <ResetPasswordPage key="reset-password" code={resetCode} notify={notify} go={go} />}
       </AnimatePresence>
+      {["home", "login"].includes(page) && <MobileBrowseNav page={page} go={go} isCustomer={isCustomer} isAdmin={isAdmin} />}
       <AnimatePresence>
         {authMode && <AuthOverlay mode={authMode} close={() => setAuthMode(null)} onSubmit={(f) => handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={(email) => { setAuthMode(null); goForgotPassword(email); }} switchMode={() => setAuthMode(authMode === "login" ? "signup" : "login")} />}
       </AnimatePresence>
@@ -573,8 +570,31 @@ function App() {
 
 function Nav({ page, go, isCustomer, isAdmin, logout }) {
   const [open, setOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("top");
   const navRef = useRef(null);
   const close = () => setOpen(false);
+
+  useEffect(() => {
+    if (page !== "home") {
+      setActiveSection("top");
+      return;
+    }
+
+    const sections = ["top", "how-it-works", "about", "packs", "reviews"]
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (visible) setActiveSection(visible.target.id);
+    }, { rootMargin: "-25% 0px -60% 0px", threshold: [0, 0.1, 0.25, 0.5] });
+    sections.forEach(section => observer.observe(section));
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [page]);
 
   // Close the mobile navigation when the user clicks/taps anywhere outside it.
   useEffect(() => {
@@ -586,22 +606,103 @@ function Nav({ page, go, isCustomer, isAdmin, logout }) {
     return () => document.removeEventListener("pointerdown", handleOutside);
   }, [open]);
 
-  const section = (id) => { close(); if (page !== "home") { go("home"); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 100); } else document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); };
-  return <header className="nav" ref={navRef}><div className="nav-inner">
+  const section = (id) => {
+    close();
+    setActiveSection(id);
+    if (page !== "home") {
+      go("home");
+      setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 100);
+    } else {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+  const navClass = `nav${page === "home" ? " nav-home" : ""}${page === "login" ? " nav-login" : ""}`;
+  const sectionLink = (id, label) => (
+    <button
+      className={activeSection === id ? "active" : ""}
+      aria-current={activeSection === id ? "location" : undefined}
+      onClick={() => section(id)}
+    >
+      {label}
+    </button>
+  );
+  return <header className={navClass} ref={navRef}><div className="nav-inner">
     <button className="brand" onClick={() => { close(); go("home") }}>
       <span>COACH<span className="accent">RAFALIA</span></span>
     </button>
     <button className="mobile-menu" aria-label="Toggle menu" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
-    <nav className={open ? "nav-links open" : "nav-links"}>
-      <button onClick={() => { close(); go("home") }}>Home</button>
-      <button onClick={() => section("about")}>About</button>
-      <button onClick={() => section("packs")}>Packs</button>
-      <button onClick={() => section("reviews")}>Reviews</button>
+    <nav className={open ? "nav-links open" : "nav-links"} aria-label="Main navigation">
+      {sectionLink("top", "Home")}
+      {sectionLink("how-it-works", "How it works")}
+      {sectionLink("about", "About")}
+      {sectionLink("packs", "Packs")}
+      {sectionLink("reviews", "Reviews")}
       {isCustomer && <button onClick={() => { close(); go("dashboard") }}>Dashboard</button>}
       {isAdmin && <button onClick={() => { close(); go("admin") }}>Admin</button>}
       {isCustomer || isAdmin ? <button className="outline-btn" onClick={() => { close(); logout() }}><LogOut size={15} /> Logout</button> : <button className="primary-btn small" onClick={() => { close(); go("login") }}><LogIn size={15} /> Login</button>}
     </nav>
   </div></header>;
+}
+
+function MobileBrowseNav({ page, go, isCustomer, isAdmin }) {
+  const [activeSection, setActiveSection] = useState(page === "home" ? "top" : "profile");
+  const browseTabs = [
+    { id: "top", label: "Home", icon: HomeIcon },
+    { id: "how-it-works", label: "Journey", icon: CalendarDays },
+    { id: "packs", label: "Packs", icon: PackageIcon },
+    { id: "reviews", label: "Reviews", icon: Star },
+    { id: "profile", label: "Profile", icon: User }
+  ];
+
+  useEffect(() => {
+    if (page !== "home") {
+      setActiveSection("profile");
+      return;
+    }
+
+    const sections = ["top", "how-it-works", "packs", "reviews"]
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (visible) setActiveSection(visible.target.id);
+    }, { rootMargin: "-20% 0px -65% 0px", threshold: [0, 0.1, 0.25, 0.5] });
+    sections.forEach(section => observer.observe(section));
+    return () => observer.disconnect();
+  }, [page]);
+
+  const navigate = (id) => {
+    setActiveSection(id);
+    if (id === "profile") {
+      if (isCustomer) go("profile");
+      else if (isAdmin) go("admin");
+      else if (page !== "login") go("login");
+      return;
+    }
+
+    if (page !== "home") {
+      go("home");
+      setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 100);
+      return;
+    }
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  return <nav className="mobile-browse-nav" aria-label="Browse page">
+    {browseTabs.map(({ id, label, icon: Icon }) => (
+      <button
+        key={id}
+        className={activeSection === id ? "active" : ""}
+        aria-current={activeSection === id ? "location" : undefined}
+        onClick={() => navigate(id)}
+      >
+        <Icon size={19} strokeWidth={activeSection === id ? 2.5 : 2} />
+        <span>{label}</span>
+      </button>
+    ))}
+  </nav>;
 }
 
 function CustomerBar({ activeSection, openSection, unreadCount = 0 }) {
@@ -622,7 +723,69 @@ function CustomerBar({ activeSection, openSection, unreadCount = 0 }) {
   </nav>;
 }
 
+function BeforeAfterSlider({ position, setPosition }) {
+  const dragging = useRef(false);
+  const comparisonLabel = position <= 50 ? "After" : "Before";
+  const updatePosition = (clientX, element) => {
+    const bounds = element.getBoundingClientRect();
+    setPosition(Math.round(Math.min(100, Math.max(0, ((clientX - bounds.left) / bounds.width) * 100))));
+  };
+
+  return <div
+    className="before-after-slider"
+    onPointerDown={event => {
+      dragging.current = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      updatePosition(event.clientX, event.currentTarget);
+    }}
+    onPointerMove={event => {
+      if (dragging.current) updatePosition(event.clientX, event.currentTarget);
+    }}
+    onPointerUp={() => { dragging.current = false; }}
+    onPointerCancel={() => { dragging.current = false; }}
+  >
+    <img className="comparison-image" src={AfterImage} alt="After fitness transformation" />
+    <div className="comparison-before" style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}>
+      <img className="comparison-image" src={BeforeImage} alt="Before fitness transformation" />
+    </div>
+    <div className="comparison-divider" style={{ left: `${position}%` }} aria-hidden="true">
+      <span><ArrowLeftRight size={17} /></span>
+    </div>
+    <div className="comparison-label" style={{ left: `${Math.min(92, Math.max(8, position))}%` }} aria-live="polite">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={comparisonLabel}
+          initial={{ opacity: 0, y: 6, scale: .92 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -6, scale: .92 }}
+          transition={{ duration: .2 }}
+        >
+          {comparisonLabel}
+        </motion.span>
+      </AnimatePresence>
+    </div>
+    <input
+      className="comparison-range"
+      type="range"
+      min="0"
+      max="100"
+      value={position}
+      onChange={event => setPosition(Number(event.target.value))}
+      aria-label="Compare before and after photos"
+      aria-valuetext={`${position}% before image visible, ${comparisonLabel} comparison`}
+    />
+  </div>;
+}
+
 function Home({ go }) {
+  const [comparisonPosition, setComparisonPosition] = useState(20);
+  const beforeShare = comparisonPosition / 100;
+  const afterShare = 1 - beforeShare;
+  const weight = Math.round(100 * beforeShare + 80 * afterShare);
+  const planWeeks = Math.round(100 * beforeShare + 12 * afterShare);
+  const supportHours = Math.round(24 * afterShare);
+  const supportDays = Math.round(7 * afterShare);
+  const satisfiedClients = Math.round(50 * afterShare);
   const packs = [
     { name: "Basic", price: "1000MAD", desc: "1 To 1 At Gym Metroflex.", items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
     { name: "Transformation", price: "1200MAD", desc: "1 To 1 In Your Home Or Your Gym", popular: true, items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
@@ -634,9 +797,8 @@ function Home({ go }) {
     ["Walid R.", "The weekly dashboard keeps me accountable every single day.", "5.0"]
   ];
 
-
   return <motion.main initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-    <section className="hero">
+    <section id="top" className="hero">
       <div className="hero-glow one" /><div className="hero-glow two" />
       <div className="container hero-grid">
         <motion.div initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: .7 }}>
@@ -668,43 +830,36 @@ function Home({ go }) {
         </motion.div>
         <motion.div className="hero-card-wrap" initial={{ scale: .9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: .8, delay: .15 }}>
           <div className="hero-card">
-            <div className="hero-card-top"><span>YOUR NEXT LEVEL</span><span className="live-dot">● LIVE</span></div>
+            <div className="hero-card-top"><span>BEFORE &amp; AFTER</span><span className="live-dot">DRAG TO COMPARE</span></div>
             <div className="hero-photo">
-              <div className="photo-overlay">
-                 <Swiper className="mySwiper"
-                    spaceBetween={30}
-                    centeredSlides={true}
-                    autoplay={{
-                      delay: 2000,
-                      disableOnInteraction: false,
-                    }}
-                    pagination={{
-                      clickable: true,
-                    }}
-                   
-                    modules={[Autoplay, Navigation]}
-                   
-                 >
-                  <SwiperSlide><img src={Img1} className="imgs-swiper" alt="image"/></SwiperSlide>
-                  <SwiperSlide><img src={Img2} className="imgs-swiper" alt="image"/></SwiperSlide>
-                  <SwiperSlide><img src={Img3} className="imgs-swiper" alt="image"/></SwiperSlide>
-                  <SwiperSlide><img src={Img4} className="imgs-swiper" alt="image"/></SwiperSlide>
-                  
-                </Swiper>
-              </div>
+              <BeforeAfterSlider position={comparisonPosition} setPosition={setComparisonPosition} />
             </div>
             <div className="mini-stats">
-              <div>
-                <AnimatedNumber value={12} />
-                <span>Weeks</span>
-              </div>
-              <div><AnimatedNumber value={4.8} decimals={1} />
-              <span>Rating</span>
-              </div>
-              <div>
-                <b>24/7</b>
-                <span>Support</span>
-              </div>
+              {[
+                { label: "Body weight", value: weight, suffix: " kg", detail: "weight", icon: Target },
+                { label: "Plan length", value: planWeeks, suffix: "", detail: "weeks", icon: CalendarDays },
+                { label: "Coach support", value: supportHours, suffix: "", detail: "support", icon: HeartPulse },
+                { label: "Satisfied clients", value: satisfiedClients, suffix: satisfiedClients > 0 ? "+" : "", detail: "clients", icon: Users }
+              ].map(({ label, value, suffix = "", detail, icon: Icon }, index) => (
+                <motion.div
+                  className="hero-stat"
+                  key={label}
+                  initial={{ opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: .5 }}
+                  transition={{ duration: .45, delay: index * .1 }}
+                >
+                  <span className="hero-stat-icon"><Icon size={15} /></span>
+                  <small>{label}</small>
+                  <strong>
+                    {label === "Satisfied clients"
+                      ? <NumberFlow value={value} suffix={suffix} transformTiming={{ duration: 300, easing: "ease-out" }} />
+                      : <NumberFlow value={value} suffix={suffix} transformTiming={{ duration: 300, easing: "ease-out" }} />}
+                    {label === "Coach support" && <>/<NumberFlow value={supportDays} transformTiming={{ duration: 300, easing: "ease-out" }} /></>}
+                  </strong>
+                  <span className="hero-stat-detail">{detail}</span>
+                </motion.div>
+              ))}
             </div>
           </div>
         </motion.div>
@@ -810,9 +965,10 @@ function Home({ go }) {
 
     <section id="packs" className="section"><div className="container"><Reveal><div className="section-label">03 — COACHING PACKS</div><h2>Choose your <span>commitment.</span></h2></Reveal><div className="pack-grid">{packs.map((p, i) => <Reveal delay={i * .1} key={p.name}><div className={"pack " + (p.popular ? "featured" : "")}>{p.popular && <div className="popular">MOST POPULAR</div>}<h3>{p.name}</h3><p>{p.desc}</p><div className="price">{p.price}<small>/{p.month} month</small></div><div className="pack-items">{p.items.map(x => <span key={x}><Check size={16} />{x}</span>)}</div><button className={p.popular ? "primary-btn" : "outline-dark"} onClick={() => go("signup")}>Get started <ArrowRight size={16} /></button></div></Reveal>)}</div></div></section>
 
-    <section id="reviews" className="section reviews"><div className="container"><Reveal><div className="section-label">04 — CLIENT RESULTS</div><h2>Real people. <span>Real change.</span></h2></Reveal><div className="review-grid">{reviews.map(([name, text, score], i) => <Reveal delay={i * .1} key={name}><div className="review"><div className="stars">{[1, 2, 3, 4, 5].map(x => <Star key={x} size={16} fill="currentColor" />)}</div><p>“{text}”</p><div className="reviewer"><div>{name[0]}</div><span><b>{name}</b><small>Verified client</small></span></div></div></Reveal>)}</div></div></section>
+    <section id="reviews" className="section reviews"><div className="container"><Reveal><div className="section-label">04 — CLIENT RESULTS</div><h2>Real people. <span>Real change.</span></h2></Reveal><div className="review-grid">{reviews.map(([name, text, score], i) => <Reveal delay={i * .1} key={name}><div className="review"><div className="stars">{[1, 2, 3, 4, 5].map(x => <Star key={x} size={16} fill="currentColor" />)}</div><p>“{text}”</p><div className="reviewer"><div>{name[0]}</div><span><b>{name}</b><small>Verified client</small></span></div></div></Reveal>)}</div></div>    </section>
+
     <section className="cta"><div className="container cta-inner"><Reveal><div><div className="section-label">READY?</div><h2>Your next chapter starts <span>today.</span></h2></div><button className="primary-btn" onClick={() => go("signup")}>Join the coaching <ArrowRight /></button></Reveal></div></section>
-  </motion.main>
+  </motion.main>;
 }
 
 function Dashboard({ customer, program, go, initialSection = "home", openDashboardSection, setUnreadCount }) {
@@ -1571,20 +1727,6 @@ function ResetPasswordPage({ code, notify, go }) {
       </div>
     </motion.div>
   </motion.main>;
-}
-function AnimatedNumber({ value, decimals = 0, suffix = "" }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, amount: .6 });
-  const count = useMotionValue(0);
-  const displayed = useTransform(count, current => `${current.toFixed(decimals)}${suffix}`);
-
-  useEffect(() => {
-    if (!inView) return undefined;
-    const controls = animate(count, value, { duration: 1.2, ease: "easeOut" });
-    return () => controls.stop();
-  }, [count, inView, value]);
-
-  return <motion.b ref={ref}>{displayed}</motion.b>;
 }
 function Reveal({ children, delay = 0 }) { return <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .15 }} transition={{ duration: .6, delay }}>{children}</motion.div> }
 function Toast({ message }) { return <motion.div className="toast" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}><Check size={17} />{message}</motion.div> }
