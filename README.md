@@ -102,6 +102,18 @@ Publish `database.rules.json` in Firebase → Realtime Database → Rules. Repla
 
 After changing `.env`, restart Vite.
 
+## Firebase Hosting
+
+The Vite app is configured for Firebase Hosting in the `coaching-wolf` project. Sign in with the Firebase CLI, build the app, and deploy Hosting:
+
+```bash
+npx firebase-tools login
+npm run build
+npx firebase-tools deploy --only hosting
+```
+
+The Hosting config serves the `dist` build and rewrites app routes to `index.html`.
+
 ## Telegram signup notifications
 
 New customer signup notifications are sent by the Firebase Cloud Function `notifyTelegramOnSignup`. The Telegram bot token is kept server-side and is never exposed in the React app.

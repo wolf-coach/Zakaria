@@ -9,8 +9,18 @@
     },
     "programs": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'omar@gmail.com')",
-        ".write": "auth != null && auth.token.email === 'omar@gmail.com'"
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'omar@gmail.com')",
+        ".write": "auth != null && auth.token.email == 'omar@gmail.com'"
+      }
+    },
+    "planTemplates": {
+      ".read": "auth != null && auth.token.email == 'omar@gmail.com'",
+      ".write": "auth != null && auth.token.email == 'omar@gmail.com'"
+    },
+    "programCompletions": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'omar@gmail.com')",
+        ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'omar@gmail.com')"
       }
     },
     "notifications": {

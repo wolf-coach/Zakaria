@@ -8,7 +8,7 @@ import { motion, AnimatePresence,
   useAnimationFrame } from "framer-motion";
 import { wrap } from "@motionone/utils";
 import {
-  ArrowRight, ArrowLeft, ArrowLeftRight, Bell, Check, ChevronDown, ChevronRight, Dumbbell, Flame, HeartPulse, Home as HomeIcon, Instagram, Package as PackageIcon, Trash2,
+  ArrowRight, ArrowLeft, ArrowLeftRight, Bell, BellRing, Check, ChevronDown, ChevronRight, Copy, Dumbbell, Eye, Flame, HeartPulse, Home as HomeIcon, Instagram, Package as PackageIcon, Pencil, Trash2,
   LayoutDashboard, LogIn, LogOut, Menu, Play, Plus, ShieldCheck, Star, Search,
   Target, User, Users, Utensils, X, CalendarDays, Clock3, Save, CheckCircle2, AlertTriangle, Send, Phone
 } from "lucide-react";
@@ -17,6 +17,7 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css";
 import BeforeImage from "./data/before.png";
 import AfterImage from "./data/after.png";
+import CoachAvatar from "./data/img1.jpeg";
 
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, firebaseConfigured, loginEmail, registerEmail, loginGoogle, logoutFirebase, resetPassword, verifyResetPasswordCode, confirmResetPassword } from "./lib/firebase";
@@ -140,6 +141,15 @@ function normalizeProgram(value) {
   return Object.fromEntries(days.map(day => [day, normalizeDay(source[day])]));
 }
 
+function getWeekKey(date = new Date()) {
+  const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const year = monday.getFullYear();
+  const month = String(monday.getMonth() + 1).padStart(2, "0");
+  const day = String(monday.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const emptyCustomer = {
   id: "", name: "", email: "", age: "", gender: "", height: "", weight: "",
   goal: "", allergies: "", health: "", phone: "", package: "", startDate: "", endDate: ""
@@ -207,22 +217,29 @@ function App() {
   const resetMode = resetParams.get("mode");
   const [page, setPage] = useState(() => (resetCode || resetMode === "resetPassword") ? "reset-password" : "home");
   const [dashboardSection, setDashboardSection] = useState("home");
+  const [adminTab, setAdminTab] = useState("customers");
   const [customerUnreadCount, setCustomerUnreadCount] = useState(0);
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(!firebaseConfigured);
+  const [clientProfileLoading, setClientProfileLoading] = useState(false);
+  const [clientProgramLoading, setClientProgramLoading] = useState(false);
+  const [clientSkeletonDelayDone, setClientSkeletonDelayDone] = useState(false);
   const [customer, setCustomer] = useState(() => firebaseConfigured ? emptyCustomer : demoCustomer);
   const [customers, setCustomers] = useLocalState("coachflow_customers", firebaseConfigured ? [] : demoCustomers);
   const [program, setProgram] = useState(demoProgram);
   const [authMode, setAuthMode] = useState(null);
   const [authPageMode, setAuthPageMode] = useState("login");
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState(null);
   const [forgotEmail, setForgotEmail] = useState("");
   const [welcomePopup, setWelcomePopup] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
   const authFlowRef = useRef(null);
+  const authLoadingStartedAtRef = useRef(Date.now());
 
-  const notify = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 3000);
+  const notify = (msg, type = "success") => {
+    setToast({ message: msg, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
   const go = (p) => {
@@ -249,13 +266,21 @@ function App() {
   // Firebase is the source of truth for the currently signed-in customer.
   // Live listeners keep the dashboard synchronized with the coach's edits.
   useEffect(() => {
-    if (!firebaseConfigured || !db || !user || user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return;
+    if (!firebaseConfigured || !db || !user || user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      setClientProfileLoading(false);
+      setClientProgramLoading(false);
+      return;
+    }
+
+    setClientProfileLoading(true);
+    setClientProgramLoading(true);
 
     const profileRef = ref(db, `users/${user.uid}`);
     const programRef = ref(db, `programs/${user.uid}`);
 
     const unsubscribeProfile = onValue(profileRef, (snap) => {
       const data = snap.val();
+      setClientProfileLoading(false);
       if (data) {
         setCustomer({
           ...emptyCustomer,
@@ -266,6 +291,7 @@ function App() {
       }
     }, (e) => {
       console.error("Could not listen to customer profile", e);
+      setClientProfileLoading(false);
       notify(e?.code === "PERMISSION_DENIED"
         ? "denied your profile.."
         : "Could not load your customer profile.");
@@ -274,9 +300,11 @@ function App() {
     const unsubscribeProgram = onValue(programRef, (snap) => {
       const data = snap.val();
       setProgram(normalizeProgram(data));
+      setClientProgramLoading(false);
     }, (e) => {
       console.error("Could not listen to customer program", e);
       setProgram(emptyProgram);
+      setClientProgramLoading(false);
     });
 
     return () => {
@@ -288,11 +316,16 @@ function App() {
   useEffect(() => {
     if (!firebaseConfigured || !auth) return;
     let active = true;
+    let authReadyTimeout;
 
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       if (!active) return;
       setUser(u);
-      setAuthReady(true);
+      window.clearTimeout(authReadyTimeout);
+      const remainingLoadingTime = Math.max(0, 2000 - (Date.now() - authLoadingStartedAtRef.current));
+      authReadyTimeout = window.setTimeout(() => {
+        if (active) setAuthReady(true);
+      }, remainingLoadingTime);
 
       // Login/signup handlers perform the profile write/load themselves.
       // Skipping here prevents the auth listener from racing them and replacing
@@ -300,6 +333,8 @@ function App() {
       if (u && authFlowRef.current === u.uid) return;
 
       if (!u) {
+        setClientProfileLoading(false);
+        setClientProgramLoading(false);
         setCustomer(emptyCustomer);
         setProgram(emptyProgram);
         if (["dashboard", "profile", "admin"].includes(page)) setPage("home");
@@ -308,33 +343,62 @@ function App() {
 
       try {
         if (u.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+          setClientProfileLoading(false);
+          setClientProgramLoading(false);
           setCustomer({ ...emptyCustomer, id: u.uid, email: u.email || "", name: u.displayName || "Coach" });
           setPage((current) => ["login", "home"].includes(current) ? "admin" : current);
         } else {
+          setClientProfileLoading(true);
+          setClientProgramLoading(true);
           setCustomer(prev => ({ ...emptyCustomer, ...prev, id: u.uid, email: u.email || "" }));
           setProgram(emptyProgram);
           setPage((current) => ["login", "home"].includes(current) ? "dashboard" : current);
         }
       } catch (e) {
         console.error("Could not load user data", e);
+        setClientProfileLoading(false);
+        setClientProgramLoading(false);
         notify("Signed in, but your profile could not be loaded. Check it.");
       }
     });
 
-    return () => { active = false; unsubscribe(); };
+    return () => {
+      active = false;
+      window.clearTimeout(authReadyTimeout);
+      unsubscribe();
+    };
   }, []);
 
   const isAdmin = !!user && user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const isCustomer = !!user && !isAdmin;
 
-  async function handleLogout() {
-    await logoutFirebase();
-    setUser(null);
-    setCustomer(emptyCustomer);
-    setProgram(emptyProgram);
-    setAuthMode(null);
-    go("home");
-    notify("You have been logged out.");
+  useEffect(() => {
+    if (!authReady || !isCustomer) {
+      setClientSkeletonDelayDone(false);
+      return;
+    }
+    setClientSkeletonDelayDone(false);
+    const timeoutId = window.setTimeout(() => setClientSkeletonDelayDone(true), 1000);
+    return () => window.clearTimeout(timeoutId);
+  }, [authReady, isCustomer, user?.uid]);
+
+  async function confirmLogout() {
+    setLogoutPending(true);
+    try {
+      await logoutFirebase();
+      setUser(null);
+      setCustomer(emptyCustomer);
+      setProgram(emptyProgram);
+      setAuthMode(null);
+      setLogoutConfirmOpen(false);
+      go("home");
+      notify("You have been logged out.");
+    } catch (e) {
+      console.error("Could not log out", e);
+      notify(e?.message || "Could not log out. Please try again.");
+    } finally {
+      setLogoutPending(false);
+    }
   }
 
   async function handleAuth(mode, form) {
@@ -359,12 +423,17 @@ function App() {
         // Route immediately after Firebase authentication succeeds.
         // Realtime Database loading happens after the screen is already shown.
         if (u.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+          setClientProfileLoading(false);
+          setClientProgramLoading(false);
           setAuthMode(null);
           go("admin");
           notify("Welcome, Coach.");
           authFlowRef.current = null;
           return;
         }
+
+        setClientProfileLoading(true);
+        setClientProgramLoading(true);
 
         const profileRef = ref(db, `users/${u.uid}`);
 
@@ -411,6 +480,8 @@ function App() {
 
         const programSnap = await get(ref(db, `programs/${u.uid}`));
         setProgram(normalizeProgram(programSnap.exists() ? programSnap.val() : emptyProgram));
+        setClientProfileLoading(false);
+        setClientProgramLoading(false);
 
         notify(mode === "signup" ? "Account created successfully." : "Welcome back.");
         authFlowRef.current = null;
@@ -440,6 +511,8 @@ function App() {
       notify(mode === "signup" ? "Account created successfully." : "Welcome back.");
     } catch (e) {
       authFlowRef.current = null;
+      setClientProfileLoading(false);
+      setClientProgramLoading(false);
       console.error(e);
       const msg = e?.code === "auth/invalid-credential" ? "Incorrect email or password."
         : e?.code === "auth/email-already-in-use" ? "This email is already registered. Try signing in."
@@ -509,36 +582,32 @@ function App() {
   }
 
   if (!authReady) {
-    return <div className="app auth-loading">
-              <div className="loading-card">
-                <div className="brand static">
-                  <span className="brand-mark">C</span>
-                  <span>COACH<span className="accent">RAFALIA</span></span>
-                </div>
-                <div className="spinner" />
-                 <p>Checking your account…</p>
-                 </div>
-              </div>;
+    return <motion.div className="app auth-loading" aria-label="Loading Coach Rafalia coaching app" aria-busy="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <CoachLoadingIndicator title="Your coaching plan is loading" detail="Getting your training plan ready." />
+    </motion.div>;
   }
 
   return (
     <div className="app">
-      <Nav page={page} go={go} isCustomer={isCustomer} isAdmin={isAdmin} logout={handleLogout} />
-      {isCustomer && ["dashboard", "profile"].includes(page) && <CustomerBar activeSection={page === "profile" ? "profile" : dashboardSection} openSection={openDashboardSection} unreadCount={customerUnreadCount} />}
+      {!(isCustomer && ["dashboard", "profile"].includes(page)) && !(isAdmin && page === "admin") && <Nav page={page} go={go} isCustomer={isCustomer} isAdmin={isAdmin} requestLogout={() => setLogoutConfirmOpen(true)} adminTab={adminTab} setAdminTab={setAdminTab} />}
+      {isCustomer && ["dashboard", "profile"].includes(page) && <CustomerBar activeSection={page === "profile" ? "profile" : dashboardSection} openSection={openDashboardSection} requestLogout={() => setLogoutConfirmOpen(true)} />}
       <AnimatePresence mode="wait">
         {page === "home" && <Home key="home" go={go} />}
-        {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} go={go} initialSection={dashboardSection} openDashboardSection={openDashboardSection} setUnreadCount={setCustomerUnreadCount} />}
-        {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} go={go} openDashboardSection={openDashboardSection} />}
-        {page === "admin" && isAdmin && <Admin key="admin" customers={customers} setCustomers={setCustomers} program={program} setProgram={setProgram} notify={notify} />}
+        {page === "dashboard" && isCustomer && <Dashboard key="dashboard" customer={customer} program={program} loading={clientProfileLoading || clientProgramLoading || !clientSkeletonDelayDone} go={go} notify={notify} initialSection={dashboardSection} openDashboardSection={openDashboardSection} setUnreadCount={setCustomerUnreadCount} />}
+        {page === "profile" && isCustomer && <Profile key="profile" customer={customer} setCustomer={setCustomer} notify={notify} go={go} openDashboardSection={openDashboardSection} unreadCount={customerUnreadCount} />}
+        {page === "admin" && isAdmin && <Admin key="admin" customers={customers} setCustomers={setCustomers} program={program} setProgram={setProgram} notify={notify} tab={adminTab} setTab={setAdminTab} requestLogout={() => setLogoutConfirmOpen(true)} />}
         {page === "login" && <Auth key={authPageMode} mode={authPageMode} onSubmit={(f) => handleAuth(authPageMode, f)} onGoogle={handleGoogle} onReset={goForgotPassword} switchMode={() => setAuthPageMode(authPageMode === "login" ? "signup" : "login")} />}
         {page === "forgot-password" && <ForgotPasswordPage key="forgot-password" initialEmail={forgotEmail} onReset={handleReset} notify={notify} go={go} />}
         {page === "reset-password" && <ResetPasswordPage key="reset-password" code={resetCode} notify={notify} go={go} />}
       </AnimatePresence>
-      {["home", "login"].includes(page) && <MobileBrowseNav page={page} go={go} isCustomer={isCustomer} isAdmin={isAdmin} />}
+      {!isCustomer && !isAdmin && ["home", "login"].includes(page) && <MobileBrowseNav page={page} go={go} isCustomer={isCustomer} isAdmin={isAdmin} />}
       <AnimatePresence>
         {authMode && <AuthOverlay mode={authMode} close={() => setAuthMode(null)} onSubmit={(f) => handleAuth(authMode, f)} onGoogle={handleGoogle} onReset={(email) => { setAuthMode(null); goForgotPassword(email); }} switchMode={() => setAuthMode(authMode === "login" ? "signup" : "login")} />}
       </AnimatePresence>
-      <AnimatePresence>{toast && <Toast message={toast} />}</AnimatePresence>
+      <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} />}</AnimatePresence>
+      <AnimatePresence>
+        {logoutConfirmOpen && <LogoutConfirmDialog onCancel={() => setLogoutConfirmOpen(false)} onConfirm={confirmLogout} pending={logoutPending} />}
+      </AnimatePresence>
       <AnimatePresence>
         {welcomePopup && (
           <motion.div className="welcome-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -568,7 +637,7 @@ function App() {
   );
 }
 
-function Nav({ page, go, isCustomer, isAdmin, logout }) {
+function Nav({ page, go, isCustomer, isAdmin, requestLogout, adminTab, setAdminTab }) {
   const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("top");
   const navRef = useRef(null);
@@ -616,7 +685,7 @@ function Nav({ page, go, isCustomer, isAdmin, logout }) {
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
     }
   };
-  const navClass = `nav${page === "home" ? " nav-home" : ""}${page === "login" ? " nav-login" : ""}`;
+  const navClass = `nav${page === "home" && !isCustomer && !isAdmin ? " nav-home" : ""}${page === "login" ? " nav-login" : ""}${isCustomer || isAdmin ? " nav-workspace" : ""}`;
   const sectionLink = (id, label) => (
     <button
       className={activeSection === id ? "active" : ""}
@@ -632,14 +701,22 @@ function Nav({ page, go, isCustomer, isAdmin, logout }) {
     </button>
     <button className="mobile-menu" aria-label="Toggle menu" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
     <nav className={open ? "nav-links open" : "nav-links"} aria-label="Main navigation">
-      {sectionLink("top", "Home")}
-      {sectionLink("how-it-works", "How it works")}
-      {sectionLink("about", "About")}
-      {sectionLink("packs", "Packs")}
-      {sectionLink("reviews", "Reviews")}
-      {isCustomer && <button onClick={() => { close(); go("dashboard") }}>Dashboard</button>}
-      {isAdmin && <button onClick={() => { close(); go("admin") }}>Admin</button>}
-      {isCustomer || isAdmin ? <button className="outline-btn" onClick={() => { close(); logout() }}><LogOut size={15} /> Logout</button> : <button className="primary-btn small" onClick={() => { close(); go("login") }}><LogIn size={15} /> Login</button>}
+      {!isCustomer && !isAdmin && <>
+        {sectionLink("top", "Home")}
+        {sectionLink("how-it-works", "How it works")}
+        {sectionLink("about", "About")}
+        {sectionLink("packs", "Packs")}
+        {sectionLink("reviews", "Reviews")}
+      </>}
+      {isCustomer && <>
+        <button className={page === "dashboard" ? "active" : ""} aria-current={page === "dashboard" ? "page" : undefined} onClick={() => { close(); go("dashboard") }}>Dashboard</button>
+        <button className={page === "profile" ? "active" : ""} aria-current={page === "profile" ? "page" : undefined} onClick={() => { close(); go("profile") }}>My profile</button>
+      </>}
+      {isAdmin && <>
+        <button className={page === "admin" && adminTab === "customers" ? "active" : ""} aria-current={page === "admin" && adminTab === "customers" ? "page" : undefined} onClick={() => { close(); setAdminTab("customers"); go("admin") }}>Customers</button>
+        <button className={page === "admin" && adminTab !== "customers" ? "active" : ""} aria-current={page === "admin" && adminTab !== "customers" ? "page" : undefined} onClick={() => { close(); setAdminTab("plan"); go("admin") }}>Meals &amp; program</button>
+      </>}
+      {isCustomer || isAdmin ? <button className="outline-btn" onClick={() => { close(); requestLogout() }}><LogOut size={15} /> Logout</button> : <button className="primary-btn small" onClick={() => { close(); go("login") }}><LogIn size={15} /> Login</button>}
     </nav>
   </div></header>;
 }
@@ -705,22 +782,40 @@ function MobileBrowseNav({ page, go, isCustomer, isAdmin }) {
   </nav>;
 }
 
-function CustomerBar({ activeSection, openSection, unreadCount = 0 }) {
+function CustomerBar({ activeSection, openSection, requestLogout }) {
   const items = [
     { id: "home", label: "Home", icon: LayoutDashboard },
-    { id: "workout", label: "Workout", icon: Dumbbell },
-    { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "profile", label: "My profile", icon: User }
+    { id: "workout", label: "Program", icon: Dumbbell },
+    { id: "profile", label: "Profile", icon: User },
+    { id: "logout", label: "Logout", icon: LogOut }
   ];
 
   return <nav className="customer-page-browser" aria-label="Customer sections">
     {items.map(item => {
       const Icon = item.icon;
-      return <motion.button key={item.id} className={activeSection === item.id ? "active" : ""} onClick={() => openSection(item.id)} whileTap={{ scale: .96 }}>
+      return <motion.button key={item.id} className={`${activeSection === item.id ? "active" : ""}${item.id === "logout" ? " nav-logout" : ""}`} aria-current={activeSection === item.id ? "page" : undefined} onClick={() => item.id === "logout" ? requestLogout() : openSection(item.id)} whileTap={{ scale: .96 }}>
         <Icon size={17} /> <span>{item.label}</span>{item.id === "notifications" && unreadCount > 0 && <b>{unreadCount > 9 ? "9+" : unreadCount}</b>}
       </motion.button>;
     })}
   </nav>;
+}
+
+function WorkspaceGreeting({ name, photoUrl, unreadCount, onNotifications, coach = false }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "U";
+  const avatarSrc = photoUrl || (coach ? CoachAvatar : "");
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [avatarSrc]);
+
+  return <div className="workspace-greeting-bar">
+    <div className="workspace-greeting">
+      {avatarSrc && !imageFailed ? <img className="workspace-avatar" src={avatarSrc} alt="" onError={() => setImageFailed(true)} /> : <span className="workspace-avatar workspace-avatar-fallback" aria-hidden="true">{initials}</span>}
+      <h1>Hi, {name}</h1>
+    </div>
+    {!coach && <button type="button" className="workspace-notifications" onClick={onNotifications} aria-label={`Open notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}>
+      <BellRing size={21} />
+      {unreadCount > 0 && <span>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+    </button>}
+  </div>;
 }
 
 function BeforeAfterSlider({ position, setPosition }) {
@@ -971,13 +1066,78 @@ function Home({ go }) {
   </motion.main>;
 }
 
-function Dashboard({ customer, program, go, initialSection = "home", openDashboardSection, setUnreadCount }) {
+function CoachLoadingIndicator({ title, detail }) {
+  return <motion.div
+    className="account-loading-layout"
+    initial={{ opacity: 0, y: 18 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: .45, ease: "easeOut" }}
+  >
+    <div className="account-loading-brand"><span className="brand-mark"><Dumbbell size={17} /></span><span>COACH<span className="accent">RAFALIA</span></span></div>
+    <motion.section className="account-loading-coach" initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .08, duration: .5 }}>
+      <motion.img src={CoachAvatar} alt="Coach Zakaria Rafalia" initial={{ scale: .92 }} animate={{ scale: 1 }} transition={{ delay: .15, duration: .55, ease: "easeOut" }} />
+      <span className="account-loading-eyebrow">YOUR COACH</span>
+      <h2>Zakaria Rafalia</h2>
+      <p>Personal training and nutrition coaching.</p>
+    </motion.section>
+    <motion.section className="account-loading-main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .2, duration: .4 }}>
+      <motion.div className="account-loading-ring" animate={{ rotate: 360 }} transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}>
+        <ShieldCheck size={23} />
+      </motion.div>
+      <div className="account-loading-copy">
+        <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .12, duration: .35 }}>{title}</motion.h1>
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .22, duration: .35 }}>{detail}</motion.p>
+      </div>
+      <div className="account-loading-track"><motion.span initial={{ scaleX: .12 }} animate={{ scaleX: [.12, .78, .35, .9, .12] }} transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }} /></div>
+    </motion.section>
+  </motion.div>;
+}
+
+function CustomerDashboardSkeleton() {
+  const loadingGroup = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: .12, delayChildren: .05 } } };
+  const loadingItem = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: .38, ease: "easeOut" } } };
+
+  return <motion.main className="page customer-page-with-bar client-dashboard-skeleton" aria-label="Loading client dashboard" aria-busy="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <motion.div className="container" variants={loadingGroup} initial="hidden" animate="show">
+      <motion.div className="skeleton-greeting" variants={loadingItem}><span className="skeleton-shape skeleton-avatar" /><span className="skeleton-greeting-copy"><i className="skeleton-shape" /><i className="skeleton-shape" /></span><span className="skeleton-shape skeleton-icon" /></motion.div>
+      <motion.section className="skeleton-overview" variants={loadingItem}>
+        <span className="skeleton-shape skeleton-eyebrow" />
+        <div className="skeleton-stat-grid">{days.slice(0, 4).map(day => <div className="skeleton-stat" key={day}><i className="skeleton-shape" /><i className="skeleton-shape" /><i className="skeleton-shape" /></div>)}</div>
+      </motion.section>
+      <motion.section className="package-progress-card panel skeleton-package" variants={loadingItem}>
+        <div className="skeleton-package-heading"><span className="skeleton-shape" /><span className="skeleton-shape" /></div>
+        <div className="skeleton-package-details">{days.slice(0, 4).map(day => <i className="skeleton-shape" key={day} />)}</div>
+        <i className="skeleton-shape skeleton-progress-line" />
+      </motion.section>
+      <motion.section className="panel week-panel skeleton-workout" variants={loadingItem}>
+        <div className="skeleton-workout-heading"><span className="skeleton-shape" /><span className="skeleton-shape" /></div>
+        <div className="skeleton-day-tabs">{days.map(day => <i className="skeleton-shape" key={day} />)}</div>
+        <div className="skeleton-workout-body"><i className="skeleton-shape" /><i className="skeleton-shape" /><i className="skeleton-shape" /><i className="skeleton-shape" /></div>
+      </motion.section>
+    </motion.div>
+  </motion.main>;
+}
+
+function Dashboard({ customer, program, loading, go, notify, initialSection = "home", openDashboardSection, setUnreadCount }) {
   const [selected, setSelected] = useState("Monday");
   const activeSection = initialSection;
   const [notifications, setNotifications] = useState([]);
+  const [completionWeek, setCompletionWeek] = useState(() => getWeekKey());
+  const [completedDays, setCompletedDays] = useState({});
+  const [completionSaving, setCompletionSaving] = useState(false);
+  const notifyRef = useRef(notify);
   const d = normalizeDay(program?.[selected]);
+  const today = new Date();
+  const currentDay = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(today);
+  const currentWeekdayOffset = (today.getDay() + 6) % 7;
   const progress = packageProgress(customer.startDate, customer.endDate);
-  const firstName = customer.name?.trim()?.split(" ")[0] || "there";
+  const fullName = customer.name?.trim() || customer.email || "there";
+  const weightValue = Number(customer.weight);
+  const hasWeight = customer.weight !== "" && customer.weight != null && Number.isFinite(weightValue);
+
+  useEffect(() => {
+    notifyRef.current = notify;
+  }, [notify]);
 
   useEffect(() => {
     if (!firebaseConfigured || !db || !auth?.currentUser?.uid) return;
@@ -988,6 +1148,33 @@ function Dashboard({ customer, program, go, initialSection = "home", openDashboa
         .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
       setNotifications(list);
     }, (e) => console.error("Could not load notifications", e));
+  }, [customer.id]);
+
+  useEffect(() => {
+    const refreshWeek = () => setCompletionWeek(getWeekKey());
+    const intervalId = window.setInterval(refreshWeek, 60_000);
+    window.addEventListener("focus", refreshWeek);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshWeek);
+    };
+  }, []);
+
+  useEffect(() => {
+    const uid = auth?.currentUser?.uid;
+    if (!firebaseConfigured || !db || !uid) {
+      setCompletedDays({});
+      return;
+    }
+    return onValue(ref(db, `programCompletions/${uid}`), snapshot => {
+      const value = snapshot.val() || {};
+      setCompletedDays(value && typeof value === "object" ? value : {});
+    }, error => {
+      console.error("Could not load weekly completion status", error);
+      if (error?.code !== "PERMISSION_DENIED" && error?.code !== "permission-denied") {
+        notifyRef.current("Could not load weekly completion status.");
+      }
+    });
   }, [customer.id]);
 
   const packageNotification = progress.awaiting
@@ -1018,6 +1205,34 @@ function Dashboard({ customer, program, go, initialSection = "home", openDashboa
     catch (e) { console.error("Could not delete notification", e); }
   };
 
+  const toggleDayComplete = async () => {
+    const uid = auth?.currentUser?.uid;
+    if (completionSaving) return;
+    setCompletionSaving(true);
+    try {
+      if (firebaseConfigured && db && uid) {
+        const completionRef = ref(db, `programCompletions/${uid}/${selected}`);
+        if (completedDays[selected] === completionWeek) await remove(completionRef);
+        else await set(completionRef, completionWeek);
+      } else {
+        setCompletedDays(current => {
+          const next = { ...current };
+          if (next[selected] === completionWeek) delete next[selected];
+          else next[selected] = completionWeek;
+          return next;
+        });
+      }
+    } catch (error) {
+      console.error("Could not update day completion status", error);
+      const denied = error?.code === "PERMISSION_DENIED" || error?.code === "permission-denied";
+      notify(denied
+        ? "Couldn't save this day. Firebase denied the write; ask your coach to publish the latest Realtime Database Rules."
+        : "Couldn't save this day. Check your connection and try again.", "error");
+    } finally {
+      setCompletionSaving(false);
+    }
+  };
+
   const openSection = (section) => {
     if (section === "profile") {
       go("profile");
@@ -1041,20 +1256,33 @@ function Dashboard({ customer, program, go, initialSection = "home", openDashboa
     </div>
   );
 
+  if (loading) return <CustomerDashboardSkeleton />;
+
   return <motion.main className="page customer-page-with-bar" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
     <div className="container">
-      <div className="dash-head">
-        <div><div className="section-label">CLIENT DASHBOARD</div><h1>Good morning, <span>{firstName}.</span></h1><p>Stay consistent. Small actions, big results.</p></div>
-      </div>
+      <WorkspaceGreeting name={fullName} photoUrl={auth?.currentUser?.photoURL} unreadCount={unreadCount} onNotifications={() => openDashboardSection("notifications")} />
 
       <AnimatePresence mode="wait">
         {activeSection === "home" && <motion.section key="customer-home" className="customer-browser-view" initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 18 }} transition={{ duration: .2 }}>
-          <div className="dash-stats">
-            <Stat icon={Target} label="Goal" value={customer.goal || "Not set"} />
-            <Stat icon={Flame} label="Current weight" value={customer.weight ? `${customer.weight} kg` : "Not set"} />
-            <Stat icon={Clock3} label="Plan remaining" value={progress.remaining === null ? "Awaiting admin" : `${progress.remaining} days`} />
-            <Stat icon={ShieldCheck} label="Package" value={customer.package || "Not assigned"} />
-          </div>
+          <motion.section className="client-profile-card" aria-label="Your client and package details" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="client-profile-top">
+              <div className="client-profile-identity">
+                <span className="client-profile-avatar">{(customer.name?.trim() || customer.email || "C").slice(0, 1).toUpperCase()}</span>
+                <div><h2>{customer.name?.trim() || "Your profile"}</h2><p>{customer.email || "Email not set"}</p></div>
+              </div>
+              <div className="client-profile-package">
+                <small>YOUR PACKAGE</small>
+                <b>{customer.package || "Package not assigned"}</b>
+                <span className={`package-status ${progress.awaiting ? "pending" : progress.active ? "active" : "expired"}`}>{progress.awaiting ? "AWAITING ADMIN" : progress.active ? "ACTIVE" : "EXPIRED"}</span>
+              </div>
+            </div>
+            <div className="client-profile-facts">
+              <div><small>Goal</small><b>{customer.goal || "Not set"}</b></div>
+              <div><small>Age</small><b>{customer.age !== "" && customer.age != null ? `${customer.age} years` : "Not set"}</b></div>
+              <div><small>Height</small><b>{customer.height !== "" && customer.height != null ? `${customer.height} cm` : "Not set"}</b></div>
+              <div><small>Current weight</small><b>{hasWeight ? `${weightValue} kg` : "Not set"}</b></div>
+            </div>
+          </motion.section>
           <section className="package-progress-card panel">
             <div className="package-progress-top"><div><span className="section-label">YOUR PACKAGE</span><h2>{customer.package || "Package not assigned"}</h2></div><span className={`package-status ${progress.awaiting ? "pending" : progress.active ? "active" : "expired"}`}>{progress.awaiting ? "AWAITING ADMIN" : progress.active ? "ACTIVE" : "EXPIRED"}</span></div>
             {progress.awaiting ? <div className="package-awaiting"><AlertTriangle size={19} /><div><b>Dates are waiting for admin confirmation.</b><p>Your coach needs to confirm your package start date. Your package end date will then be calculated automatically.</p></div></div> : <>
@@ -1067,7 +1295,18 @@ function Dashboard({ customer, program, go, initialSection = "home", openDashboa
         </motion.section>}
 
         {activeSection === "workout" && <motion.section key="customer-workout" className="customer-browser-view" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .2 }}>
-          <section className="panel week-panel"><div className="panel-title"><div><span className="section-label">THIS WEEK</span><h2>Your program</h2></div><CalendarDays /></div><div className="day-tabs">{days.map(day => <button className={selected === day ? "active" : ""} onClick={() => setSelected(day)} key={day}>{day.slice(0, 3)}<small>{day}</small></button>)}</div><AnimatePresence mode="wait"><motion.div key={selected} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="program-content"><div className="program-heading"><div className="day-icon"><Dumbbell /></div><div><small>{selected}</small><h3>{d.workout || "Your workout will appear here."}</h3></div></div><h4>Workout</h4>{d.exercises.map((x, i) => <div className="exercise" key={`${x}-${i}`}><span>{String(i + 1).padStart(2, "0")}</span><b>{x}</b><Check size={16} /></div>)}<h4>Meals</h4><div className="meal-list">{d.meals.map((x, i) => <div key={`${x}-${i}`}><Utensils size={16} /><span>{x}</span></div>)}</div></motion.div></AnimatePresence></section>
+          <section className="panel week-panel"><div className="panel-title"><div><span className="section-label">THIS WEEK</span><h2>Your program</h2></div><CalendarDays /></div><div className="day-tabs customer-day-tabs" aria-label="Choose a day for your weekly program">{days.map((day, index) => {
+            const isToday = day === currentDay;
+            const isDone = completedDays[day] === completionWeek;
+            const calendarDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + index - currentWeekdayOffset);
+            const dayNumber = new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(calendarDate);
+            return <button type="button" className={`${selected === day ? "active" : ""}${isToday ? " today" : ""}`} onClick={() => setSelected(day)} aria-label={`${day}, ${new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric" }).format(calendarDate)}${isToday ? ", today" : ""}${isDone ? ", completed" : ""}`} aria-pressed={selected === day} key={day}>
+              <span className="day-tab-name">{day.slice(0, 3)}</span>
+              <span className="day-tab-number">{dayNumber}</span>
+              {isToday && <span className="day-tab-today">Today</span>}
+              {isDone && <span className="day-tab-complete" aria-hidden="true"><Check size={12} /></span>}
+            </button>;
+          })}</div><AnimatePresence mode="wait"><motion.div key={selected} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="program-content"><div className="program-heading"><div className="day-icon"><Dumbbell /></div><div><small>{selected}</small><h3>{d.workout || "Your workout will appear here."}</h3></div></div><button type="button" className={`completion-action${completedDays[selected] === completionWeek ? " completed" : ""}`} onClick={toggleDayComplete} disabled={completionSaving}><CheckCircle2 size={17} />{completionSaving ? "Saving…" : completedDays[selected] === completionWeek ? "Day completed · Undo" : "Mark day as done"}</button><h4>Workout</h4>{d.exercises.map((x, i) => <div className="exercise" key={`${x}-${i}`}><span>{String(i + 1).padStart(2, "0")}</span><b>{x}</b><Check size={16} /></div>)}<h4>Meals</h4><div className="meal-list">{d.meals.map((x, i) => <div key={`${x}-${i}`}><Utensils size={16} /><span>{x}</span></div>)}</div></motion.div></AnimatePresence></section>
         </motion.section>}
 
         {activeSection === "notifications" && <motion.section key="customer-notifications" className="customer-browser-view" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .2 }}>
@@ -1078,9 +1317,7 @@ function Dashboard({ customer, program, go, initialSection = "home", openDashboa
   </motion.main>
 }
 
-function Stat({ icon: Icon, label, value }) { return <div className="stat-card"><div className="stat-icon"><Icon size={18} /></div><small>{label}</small><b>{value}</b></div> }
-
-function Profile({ customer, setCustomer, notify, go, openDashboardSection }) {
+function Profile({ customer, setCustomer, notify, go, openDashboardSection, unreadCount = 0 }) {
   const [form, setForm] = useState(customer);
   const save = async () => {
     try {
@@ -1095,8 +1332,10 @@ function Profile({ customer, setCustomer, notify, go, openDashboardSection }) {
     }
   };
   const fields = [["name", "Full name"], ["email", "Email"], ["age", "Age"], ["gender", "Gender"], ["height", "Height (cm)"], ["weight", "Weight (kg)"], ["goal", "Main goal"], ["phone", "Phone"], ["allergies", "Allergies"], ["health", "Health / medical notes"]];
+  const fullName = customer.name?.trim() || customer.email || "there";
   return <motion.main className="page customer-page-with-bar" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
     <div className="container narrow">
+      <WorkspaceGreeting name={fullName} photoUrl={auth?.currentUser?.photoURL} unreadCount={unreadCount} onNotifications={() => openDashboardSection("notifications")} />
       <div className="page-heading">
         <div className="section-label">
         MY PROFILE
@@ -1108,9 +1347,8 @@ function Profile({ customer, setCustomer, notify, go, openDashboardSection }) {
         <div className="profile-card">{fields.map(([key, label]) => <label key={key}>{label}<input value={form[key] ?? ""} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>)}<button className="primary-btn" onClick={save}><Save size={17} /> Save changes</button></div></div></motion.main>
 }
 
-function Admin({ customers, setCustomers, program, setProgram, notify }) {
+function Admin({ customers, setCustomers, program, setProgram, notify, tab, setTab, requestLogout }) {
   const [selected, setSelected] = useState(null);
-  const [tab, setTab] = useState("customers");
   const [adminLoading, setAdminLoading] = useState(firebaseConfigured);
   const [programLoading, setProgramLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1118,7 +1356,6 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   const [notificationTitle, setNotificationTitle] = useState("");
   const [notificationMessage, setNotificationMessage] = useState("");
   const [notificationSending, setNotificationSending] = useState(false);
-  const programBeforeEditRef = useRef(emptyProgram);
   const [search, setSearch] = useState("");
   const [startDateDraft, setStartDateDraft] = useState("");
   // Mobile-app style navigation: which pane shows on a phone-width screen,
@@ -1126,8 +1363,25 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   // weekly program/meal builder is currently focused.
   const [mobileView, setMobileView] = useState("list");
   const [detailTab, setDetailTab] = useState("info");
+  const [completionStatus, setCompletionStatus] = useState({});
+  const [completionLoading, setCompletionLoading] = useState(false);
+  const [completionLoadError, setCompletionLoadError] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePending, setDeletePending] = useState(false);
   const [activeDay, setActiveDay] = useState(days[0]);
+  const [copyPickerOpen, setCopyPickerOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [previewMode, setPreviewMode] = useState(false);
+  const [planTemplates, setPlanTemplates] = useLocalState("coachflow_plan_templates", []);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  const [clientPickerSearch, setClientPickerSearch] = useState("");
+  const clientPickerRef = useRef(null);
   const currentDay = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
+  const today = new Date();
+  const currentWeekdayOffset = (today.getDay() + 6) % 7;
 
   useEffect(() => {
     if (!firebaseConfigured || !db || !auth?.currentUser) {
@@ -1155,19 +1409,96 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   const selectedCustomer = customers.find(x => x.id === selected) || null;
 
   useEffect(() => {
+    if (!firebaseConfigured || !db || !auth?.currentUser) return;
+    const unsubscribe = onValue(ref(db, "planTemplates"), snapshot => {
+      const raw = snapshot.val();
+      if (!snapshot.exists() && Array.isArray(planTemplates) && planTemplates.length) {
+        const legacyTemplates = Object.fromEntries(planTemplates.filter(item => item?.id).map(item => [item.id, item]));
+        set(ref(db, "planTemplates"), legacyTemplates).catch(error => console.error("Could not migrate saved plan templates", error));
+        return;
+      }
+      const templates = raw && typeof raw === "object" ? Object.values(raw).filter(item => item?.id && item?.name && item?.data) : [];
+      setPlanTemplates(templates);
+    }, error => {
+      console.error("Could not load saved plan templates", error);
+      notify(error?.code === "PERMISSION_DENIED" || error?.code === "permission-denied"
+        ? "Firebase denied access to plan templates. Publish the latest Realtime Database Rules."
+        : "Could not load saved plan templates.");
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!firebaseConfigured || !db || !selectedCustomer?.id) {
+      setCompletionStatus({});
+      setCompletionLoading(false);
+      setCompletionLoadError(false);
+      return;
+    }
+    setCompletionStatus({});
+    setCompletionLoading(true);
+    setCompletionLoadError(false);
+    const unsubscribe = onValue(ref(db, `programCompletions/${selectedCustomer.id}`), snapshot => {
+      const value = snapshot.val();
+      setCompletionStatus(value && typeof value === "object" ? value : {});
+      setCompletionLoading(false);
+    }, error => {
+      console.error("Could not load customer completion status", error);
+      setCompletionStatus({});
+      setCompletionLoadError(true);
+      setCompletionLoading(false);
+    });
+    return () => unsubscribe();
+  }, [selectedCustomer?.id]);
+
+  useEffect(() => {
+    if (!clientPickerOpen) return;
+    const handleOutside = event => {
+      if (clientPickerRef.current && !clientPickerRef.current.contains(event.target)) setClientPickerOpen(false);
+    };
+    const handleEscape = event => {
+      if (event.key === "Escape") setClientPickerOpen(false);
+    };
+    document.addEventListener("pointerdown", handleOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [clientPickerOpen]);
+
+  useEffect(() => {
+    if (!copyPickerOpen) return;
+    const handleEscape = event => {
+      if (event.key === "Escape") setCopyPickerOpen(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [copyPickerOpen]);
+
+  useEffect(() => {
+    if (!templatePickerOpen) return;
+    const handleEscape = event => {
+      if (event.key === "Escape") setTemplatePickerOpen(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [templatePickerOpen]);
+
+  useEffect(() => {
     setStartDateDraft(selectedCustomer?.startDate || "");
   }, [selectedCustomer?.id, selectedCustomer?.startDate]);
 
   useEffect(() => {
     if (!firebaseConfigured || !db || !selectedCustomer?.id) {
       setProgram(firebaseConfigured ? emptyProgram : demoProgram);
+      setProgramLoading(false);
       return;
     }
     setProgramLoading(true);
     const unsubscribe = onValue(ref(db, `programs/${selectedCustomer.id}`), (snap) => {
       const normalized = normalizeProgram(snap.val());
       setProgram(normalized);
-      programBeforeEditRef.current = normalized;
       setProgramLoading(false);
     }, (e) => {
       console.error("Could not load customer program", e);
@@ -1188,6 +1519,35 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   const update = (key, val) => setCustomers(prev => prev.map(c => c.id === selected ? { ...c, [key]: val } : c));
   const openCustomer = (id) => { setSelected(id); setDetailTab("info"); setMobileView("detail"); };
   const backToCustomerList = () => setMobileView("list");
+  const deleteCustomer = async () => {
+    if (!deleteTarget || deletePending) return;
+    const target = deleteTarget;
+    setDeletePending(true);
+    try {
+      if (firebaseConfigured && db) {
+        await update(ref(db), {
+          [`users/${target.id}`]: null,
+          [`programs/${target.id}`]: null,
+          [`notifications/${target.id}`]: null,
+          [`programCompletions/${target.id}`]: null
+        });
+      }
+      setCustomers(current => current.filter(customer => customer.id !== target.id));
+      if (selected === target.id) {
+        setSelected(null);
+        setMobileView("list");
+      }
+      setDeleteTarget(null);
+      notify(`${target.name || target.email || "Client"} and their linked data were deleted.`);
+    } catch (error) {
+      console.error("Could not delete client and linked data", error);
+      notify(error?.code === "permission-denied"
+        ? "Firebase blocked deleting this client. Check the Realtime Database Rules."
+        : "Could not delete this client and linked data.");
+    } finally {
+      setDeletePending(false);
+    }
+  };
   const browseCustomer = (direction) => {
     if (!selectedCustomer) return;
     const index = filteredCustomers.findIndex(c => c.id === selectedCustomer.id);
@@ -1237,57 +1597,95 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   };
 
   const updateProgram = (day, key, val) => setProgram(prev => ({ ...prev, [day]: { ...(prev[day] || {}), [key]: val } }));
+  const copyActiveDayTo = targetDay => {
+    if (!targetDay || targetDay === activeDay) return;
+    setProgram(prev => {
+      const source = normalizeDay(prev[activeDay]);
+      return {
+        ...prev,
+        [targetDay]: {
+          ...normalizeDay(prev[targetDay]),
+          meals: [...source.meals],
+          workout: source.workout,
+          exercises: [...source.exercises]
+        }
+      };
+    });
+    notify(`Meals and program copied from ${activeDay} to ${targetDay}.`);
+    setCopyPickerOpen(false);
+  };
+  const saveDayTemplate = async () => {
+    const name = templateName.trim();
+    if (!name) return notify("Enter a name for this template.");
+    const dayData = normalizeDay(program[activeDay]);
+    const template = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      category: "plan",
+      data: {
+        meals: [...dayData.meals],
+        workout: dayData.workout,
+        exercises: [...dayData.exercises]
+      }
+    };
+    setTemplateSaving(true);
+    try {
+      if (firebaseConfigured && db) await set(ref(db, `planTemplates/${template.id}`), template);
+      setPlanTemplates(current => [...(Array.isArray(current) ? current.filter(item => item.id !== template.id) : []), template]);
+      setSelectedTemplateId(template.id);
+      setTemplateName("");
+      notify("Plan template saved.");
+    } catch (error) {
+      console.error("Could not save plan template", error);
+      notify(error?.code === "PERMISSION_DENIED" || error?.code === "permission-denied"
+        ? "Firebase denied saving templates. Publish the latest Realtime Database Rules."
+        : "Could not save this plan template.");
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+  const applyDayTemplate = () => {
+    const template = (Array.isArray(planTemplates) ? planTemplates : []).find(item => item.id === selectedTemplateId);
+    if (!template) return notify("Choose a matching template first.");
+    setProgram(prev => ({
+      ...prev,
+      [activeDay]: {
+        ...normalizeDay(prev[activeDay]),
+        ...template.data,
+        ...(template.data.exercises ? { exercises: [...template.data.exercises] } : {}),
+        ...(template.data.meals ? { meals: [...template.data.meals] } : {})
+      }
+    }));
+    notify(`Plan template applied to ${activeDay}.`);
+  };
   const saveProgram = async () => {
     if (!selectedCustomer?.id) return notify("Select a customer first.");
     setProgramSaving(true);
     try {
-      // Compare against the immutable snapshot captured when this customer's
-      // program was loaded. This makes meal-change detection reliable even
-      // when Firebase sends the current program back through onValue.
-      const before = normalizeProgram(programBeforeEditRef.current || emptyProgram);
       const after = normalizeProgram(program);
-      const mealChanged = days.some(day =>
-        JSON.stringify(before[day]?.meals || []) !== JSON.stringify(after[day]?.meals || [])
-      );
       const now = Date.now();
 
       if (firebaseConfigured && db) {
         await set(ref(db, `programs/${selectedCustomer.id}`), after);
 
-        const notification = mealChanged
-          ? {
-              title: "Your meal plan has been updated.",
-              message: "Your coach updated your meals in your weekly nutrition plan.",
-              type: "meal"
-            }
-          : {
-              title: "Your program has been updated.",
-              message: "Your coach added or changed your weekly training and program.",
-              type: "program"
-            };
-
         try {
           await set(ref(db, `notifications/${selectedCustomer.id}/program-${now}`), {
-            ...notification,
+            title: "Your plan has been updated.",
+            message: "Your coach updated your weekly meals and training program.",
             createdAt: now,
-            read: false
+            read: false,
+            type: "program"
           });
         } catch (notificationError) {
           console.error("Could not send program notification", notificationError);
           setProgram(after);
-          programBeforeEditRef.current = after;
-          notify(mealChanged
-            ? "Meal plan updated, but the customer notification could not be sent. Publish the latest Realtime Database Rules."
-            : "Program updated, but the customer notification could not be sent. Publish the latest Realtime Database Rules.");
+          notify("Plan updated, but the customer notification could not be sent. Publish the latest Realtime Database Rules.");
           return;
         }
       }
 
       setProgram(after);
-      programBeforeEditRef.current = after;
-      notify(mealChanged
-        ? `Meal plan updated and notification sent to ${selectedCustomer.name || selectedCustomer.email}.`
-        : `Program saved for ${selectedCustomer.name || selectedCustomer.email}.`);
+      notify(`Meals and program published to ${selectedCustomer.name || selectedCustomer.email}.`);
     } catch (e) {
       console.error("Could not save program or send notification", e);
       notify(e?.code === "permission-denied"
@@ -1324,15 +1722,22 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
   const activeDayData = program[activeDay] || { workout: "", exercises: [], meals: [] };
   const activeDayExercises = activeDayData.exercises || [];
   const activeDayMeals = activeDayData.meals || [];
+  const matchingTemplates = Array.isArray(planTemplates) ? planTemplates.filter(item => item && ["plan", "meals", "program"].includes(item.category)) : [];
+  const selectedTemplate = matchingTemplates.find(item => item.id === selectedTemplateId) || null;
+  const matchingClients = customers.filter(client => [client.name, client.email].some(value => String(value || "").toLowerCase().includes(clientPickerSearch.trim().toLowerCase())));
   const setActiveDayList = (key, index, value) => { const list = [...(program[activeDay]?.[key] || [])]; list[index] = value; updateProgram(activeDay, key, list); };
   const addActiveDayItem = key => updateProgram(activeDay, key, [...(program[activeDay]?.[key] || []), ""]);
   const removeActiveDayItem = (key, index) => updateProgram(activeDay, key, (program[activeDay]?.[key] || []).filter((_, i) => i !== index));
   const selectedStatus = selectedCustomer ? packageProgress(selectedCustomer.startDate, selectedCustomer.endDate) : null;
+  const coachName = `Coach ${(auth?.currentUser?.displayName || auth?.currentUser?.email?.split("@")[0] || ADMIN_EMAIL.split("@")[0]).replace(/^coach\s+/i, "").trim().toUpperCase()}`;
 
   return <motion.main className="page admin-app" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><div className="container">
-    <div className="admin-head"><div><div className="section-label">COACH CONTROL CENTER</div><h1>Admin <span>dashboard.</span></h1><p>Manage customer packages, dates, notifications and weekly programs from one place.</p></div><div className="admin-identity"><CheckCircle2 size={16} /> Signed in as <b>{auth?.currentUser?.email || ADMIN_EMAIL}</b></div></div>
+    <WorkspaceGreeting name={coachName} photoUrl={auth?.currentUser?.photoURL} coach />
     <div className="admin-summary"><div className="admin-summary-card"><Users size={18} /><span>Total customers</span><b>{customers.length}</b></div><div className="admin-summary-card"><CheckCircle2 size={18} /><span>Active packages</span><b>{activeCount}</b></div><div className="admin-summary-card"><Clock3 size={18} /><span>Awaiting dates</span><b>{pendingCount}</b></div><div className="admin-summary-card"><Bell size={18} /><span>Expires ≤ 7 days</span><b>{expiringCount}</b></div></div>
-    <div className="admin-tabs"><button className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}><Users size={16} /> Customers <span className="tab-count">{customers.length}</span></button><button className={tab === "program" ? "active" : ""} onClick={() => setTab("program")}><Utensils size={16} /> Meals & program</button></div>
+    <div className="admin-tabs" role="navigation" aria-label="Coach workspace">
+      <button type="button" aria-current={tab === "customers" ? "page" : undefined} className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}><Users size={16} /> Customers <span className="tab-count">{customers.length}</span></button>
+      <button type="button" aria-current={tab !== "customers" ? "page" : undefined} className={tab !== "customers" ? "active" : ""} onClick={() => setTab("plan")}><Dumbbell size={16} /> Meals &amp; program</button>
+    </div>
 
     {adminLoading ? <div className="panel loading-panel"><div className="spinner" /><h3>Loading customers…</h3><p>Getting all customer profiles from Firebase.</p></div> : tab === "customers" ? <div className={`admin-app-grid mobile-showing-${mobileView}`}>
       <div className="customer-pane">
@@ -1342,16 +1747,21 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
             const p = packageProgress(c.startDate, c.endDate);
             const statusClass = p.awaiting ? "pending" : !p.active ? "expired" : p.remaining <= 7 ? "expiring" : "active";
             const statusLabel = p.awaiting ? "Awaiting dates" : !p.active ? "Expired" : p.remaining <= 7 ? `${p.remaining}d left` : "Active";
-            return <motion.button whileTap={{ scale: .98 }} className={selected === c.id ? "selected" : ""} key={c.id} onClick={() => openCustomer(c.id)}>
-              <span className="customer-avatar">{(c.name || c.email || "C")[0].toUpperCase()}</span>
-              <span className="customer-card-body">
-                <b>{c.name || "Unnamed customer"}</b>
-                <small>{c.email}</small>
-                <span className="customer-card-meta"><em className={`status-chip ${statusClass}`}>{statusLabel}</em><em className="package-chip">{c.package || "No package"}</em></span>
-                {!p.awaiting && <span className="mini-progress"><span style={{ width: `${p.percent}%` }} /></span>}
-              </span>
-              <ChevronRight size={17} className="chevron" />
-            </motion.button>;
+            return <motion.div className="customer-list-item" key={c.id} layout>
+              <motion.button type="button" whileTap={{ scale: .98 }} className={`customer-list-select${selected === c.id ? " selected" : ""}`} onClick={() => openCustomer(c.id)}>
+                <span className="customer-avatar">{(c.name || c.email || "C")[0].toUpperCase()}</span>
+                <span className="customer-card-body">
+                  <b>{c.name || "Unnamed customer"}</b>
+                  <small>{c.email}</small>
+                  <span className="customer-card-meta"><em className={`status-chip ${statusClass}`}>{statusLabel}</em><em className="package-chip">{c.package || "No package"}</em></span>
+                  {!p.awaiting && <span className="mini-progress"><span style={{ width: `${p.percent}%` }} /></span>}
+                </span>
+                <ChevronRight size={17} className="chevron" />
+              </motion.button>
+              <button type="button" className="customer-delete-button" onClick={() => setDeleteTarget(c)} aria-label={`Delete ${c.name || c.email}`} title="Delete client">
+                <Trash2 size={16} />
+              </button>
+            </motion.div>;
           })}
         </div>
       </div>
@@ -1375,6 +1785,7 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
           <div className="detail-subtabs">
             <button type="button" className={detailTab === "info" ? "active" : ""} onClick={() => setDetailTab("info")}><User size={14} /> Info</button>
             <button type="button" className={detailTab === "package" ? "active" : ""} onClick={() => setDetailTab("package")}><PackageIcon size={14} /> Package</button>
+            <button type="button" className={detailTab === "progress" ? "active" : ""} onClick={() => setDetailTab("progress")}><CalendarDays size={14} /> Progress</button>
             <button type="button" className={detailTab === "notify" ? "active" : ""} onClick={() => setDetailTab("notify")}><Bell size={14} /> Notify</button>
           </div>
 
@@ -1390,6 +1801,20 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
               <button className="outline-dark" onClick={saveCustomer} disabled={saving}><Save size={17} /> {saving ? "Saving…" : "Save customer information"}</button>
             </motion.div>}
 
+            {detailTab === "progress" && <motion.div className="admin-completion-progress" key="progress" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
+              <div className="admin-completion-heading"><div><span className="section-label">THIS WEEK</span><h3>Workout completion</h3></div><b>{days.filter(day => completionStatus[day] === getWeekKey(today)).length}<small> / 7 days</small></b></div>
+              {completionLoading ? <div className="admin-completion-message">Loading this week's progress…</div>
+                : completionLoadError ? <div className="admin-completion-message error">Completion status is unavailable for this client.</div>
+                  : <div className="admin-completion-days">{days.map(day => {
+                    const isDone = completionStatus[day] === getWeekKey(today);
+                    return <div className={`admin-completion-day${isDone ? " done" : ""}`} key={day}>
+                      <span className="admin-completion-mark">{isDone ? <Check size={15} /> : <span />}</span>
+                      <b>{day}</b>
+                      <small>{isDone ? "Done" : "Not done"}</small>
+                    </div>;
+                  })}</div>}
+            </motion.div>}
+
             {detailTab === "notify" && <motion.div key="notify" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
               <div className="customer-notification-box no-border">
                 <div><span className="section-label">DIRECT NOTIFICATION</span><h3>Send to this customer</h3><p>Only <b>{selectedCustomer.name || selectedCustomer.email}</b> will receive this notification.</p></div>
@@ -1402,13 +1827,137 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
         </motion.div>}
       </div>
     </div> : <div className="panel program-admin">
-      <div className="section-label">PROGRAM BUILDER</div><h2>Meals & workouts</h2>{selectedCustomer ? <p className="program-client">Drafting for <b>{selectedCustomer.name || selectedCustomer.email}</b></p> : <p className="program-client">Select a customer from the Customers tab first.</p>}
+      <div className="section-label">WEEKLY PLAN BUILDER</div>
+      <h2>Meals &amp; program</h2>
+      <div className="plan-client-select" ref={clientPickerRef}>
+        <button
+          type="button"
+          className={`plan-client-trigger${clientPickerOpen ? " open" : ""}${selectedCustomer ? " selected" : ""}`}
+          onClick={() => { setClientPickerOpen(open => !open); setClientPickerSearch(""); }}
+          aria-haspopup="dialog"
+          aria-expanded={clientPickerOpen}
+        >
+          <span className="plan-client-avatar">{selectedCustomer ? (selectedCustomer.name || selectedCustomer.email || "C")[0].toUpperCase() : <Users size={17} />}</span>
+          <span className="plan-client-trigger-copy">
+            <small>{selectedCustomer ? "PLAN FOR" : "CLIENT"}</small>
+            <b>{selectedCustomer?.name || "Choose a client"}</b>
+            {selectedCustomer?.email && <small>{selectedCustomer.email}</small>}
+          </span>
+          <span className="plan-client-change">{selectedCustomer ? "Change client" : "Select client"} <ChevronDown size={16} className={clientPickerOpen ? "rotated" : ""} /></span>
+        </button>
+        <AnimatePresence>
+          {clientPickerOpen && <motion.div
+            className="plan-client-popup-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: .18 }}
+            onClick={() => setClientPickerOpen(false)}
+          >
+            <motion.div
+              className="plan-client-options"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Choose a client"
+              initial={{ opacity: 0, y: 14, scale: .97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: .98 }}
+              transition={{ duration: .2, ease: "easeOut" }}
+              onClick={event => event.stopPropagation()}
+            >
+              <div className="plan-client-popup-heading"><div><span className="section-label">MEALS &amp; PROGRAM</span><h3>Choose a client</h3><p>Select who this weekly plan is for.</p></div><button type="button" className="plan-client-popup-close" onClick={() => setClientPickerOpen(false)} aria-label="Close client picker">×</button></div>
+              <div className="plan-client-search"><Search size={16} /><input type="search" value={clientPickerSearch} onChange={event => setClientPickerSearch(event.target.value)} placeholder="Search clients…" aria-label="Search clients" /></div>
+              <div className="plan-client-option-list" role="listbox" aria-label="Clients">
+                {matchingClients.length === 0 ? <p className="plan-client-empty">No clients match that search.</p> : matchingClients.map(client => (
+                  <motion.button
+                    type="button"
+                    role="option"
+                    aria-selected={selectedCustomer?.id === client.id}
+                    className={`plan-client-option${selectedCustomer?.id === client.id ? " active" : ""}`}
+                    key={client.id}
+                    onClick={() => {
+                      setSelected(client.id);
+                      setActiveDay(days[0]);
+                      setCopyPickerOpen(false);
+                      setPreviewMode(false);
+                      setClientPickerOpen(false);
+                      setClientPickerSearch("");
+                    }}
+                    whileHover={{ x: 3 }}
+                    whileTap={{ scale: .99 }}
+                  >
+                    <span className="plan-client-avatar">{(client.name || client.email || "C")[0].toUpperCase()}</span>
+                    <span className="plan-client-trigger-copy"><b>{client.name || "Unnamed client"}</b><small>{client.email || "No email address"}</small></span>
+                    {selectedCustomer?.id === client.id && <Check size={17} />}
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>}
+        </AnimatePresence>
+      </div>
 
-      <div className="day-tabs admin-day-tabs">{days.map(day => { const isToday = day === currentDay; return <button type="button" className={activeDay === day ? "active" : ""} onClick={() => setActiveDay(day)} key={day}>{day.slice(0, 3)}<small>{day}</small>{isToday && <i className="day-dot" />}</button>; })}</div>
+      <div className="plan-tools">
+        <div className="plan-template-tools">
+          <div className="plan-template-select-row">
+            <button type="button" className="plan-template-trigger" onClick={() => setTemplatePickerOpen(true)} disabled={!selectedCustomer} aria-haspopup="dialog" aria-expanded={templatePickerOpen}>
+              <span><small>SAVED PLAN TEMPLATES</small><b>{selectedTemplate?.name || "Choose a template"}</b></span><ChevronDown size={16} />
+            </button>
+            <button type="button" className="outline-dark plan-tool-button" onClick={applyDayTemplate} disabled={!selectedTemplate || !selectedCustomer}><Copy size={15} /> Apply</button>
+          </div>
+          <div className="plan-tool-row">
+            <input value={templateName} onChange={event => setTemplateName(event.target.value)} placeholder="Name this plan template" aria-label="Template name" />
+            <button type="button" className="outline-dark plan-tool-button" onClick={saveDayTemplate} disabled={!selectedCustomer || templateSaving}><Save size={15} /> {templateSaving ? "Saving…" : "Save template"}</button>
+          </div>
+        </div>
+        <AnimatePresence>
+          {templatePickerOpen && <motion.div className="plan-copy-popup-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setTemplatePickerOpen(false)}>
+            <motion.div className="plan-copy-popup plan-template-popup" role="dialog" aria-modal="true" aria-labelledby="plan-template-popup-title" initial={{ opacity: 0, y: 16, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 9, scale: .98 }} transition={{ duration: .22, ease: "easeOut" }} onClick={event => event.stopPropagation()}>
+              <div className="plan-copy-popup-heading">
+                <div><span className="section-label">SAVED PLANS</span><h3 id="plan-template-popup-title">Choose a template</h3><p>Select a saved workout and meal plan to apply to {activeDay}.</p></div>
+                <button type="button" className="plan-copy-popup-close" onClick={() => setTemplatePickerOpen(false)} aria-label="Close template picker">×</button>
+              </div>
+              <div className="plan-template-options" role="listbox" aria-label="Saved plan templates">
+                {matchingTemplates.length === 0 ? <p className="plan-template-empty">No saved templates yet. Save this day to create your first template.</p> : matchingTemplates.map(template => (
+                  <motion.button type="button" role="option" aria-selected={selectedTemplateId === template.id} className={`plan-template-option${selectedTemplateId === template.id ? " active" : ""}`} key={template.id} onClick={() => { setSelectedTemplateId(template.id); setTemplatePickerOpen(false); }} whileHover={{ x: 3 }} whileTap={{ scale: .99 }}>
+                    <span className="plan-template-option-icon"><Dumbbell size={16} /></span>
+                    <span className="plan-template-option-copy"><b>{template.name}</b><small>{template.data?.workout || `${template.data?.exercises?.length || 0} exercises · ${template.data?.meals?.length || 0} meals`}</small></span>
+                    {selectedTemplateId === template.id && <Check size={17} />}
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>}
+        </AnimatePresence>
+      </div>
 
-      {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : <AnimatePresence mode="wait">
+      <div className="day-tabs admin-day-tabs" aria-label="Choose a day for the weekly plan">{days.map((day, index) => {
+        const isToday = day === currentDay;
+        const calendarDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + index - currentWeekdayOffset);
+        const dayNumber = new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(calendarDate);
+        return <button type="button" className={`${activeDay === day ? "active" : ""}${isToday ? " today" : ""}`} onClick={() => setActiveDay(day)} aria-label={`${day}, ${new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric" }).format(calendarDate)}${isToday ? ", today" : ""}`} aria-pressed={activeDay === day} key={day}>
+          <span className="day-tab-name">{day.slice(0, 3)}</span>
+          <span className="day-tab-number">{dayNumber}</span>
+          {isToday && <span className="day-tab-today">Today</span>}
+        </button>;
+      })}</div>
+
+      <div className="plan-preview-toggle">
+        <span>{previewMode ? "Client preview" : "Editing draft"}</span>
+        <button type="button" className="outline-dark plan-tool-button" onClick={() => setPreviewMode(value => !value)} disabled={!selectedCustomer}>
+          {previewMode ? <><Pencil size={15} /> Back to editing</> : <><Eye size={15} /> Preview as client</>}
+        </button>
+      </div>
+
+      {programLoading ? <div className="loading-panel compact"><div className="spinner" /><h3>Loading this customer's program…</h3></div> : previewMode ? <motion.section className="client-plan-preview" key={`preview-${tab}-${activeDay}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="client-plan-preview-heading"><span className="section-label">{selectedCustomer?.name || "CLIENT"} · {activeDay.toUpperCase()}</span><h3>{activeDayData.workout || "Your workout"}</h3></div>
+        <h4>Workout</h4>
+        {activeDayExercises.length ? <ol>{activeDayExercises.map((exercise, index) => <li key={`${exercise}-${index}`}>{exercise}</li>)}</ol> : <p>No exercises added for this day yet.</p>}
+        <h4>Meals</h4>
+        {activeDayMeals.length ? <ul>{activeDayMeals.map((meal, index) => <li key={`${meal}-${index}`}><Utensils size={16} />{meal}</li>)}</ul> : <p>No meals added for this day yet.</p>}
+      </motion.section> : <AnimatePresence mode="wait">
         <motion.div className="day-editor mobile-day-editor" key={activeDay} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: .18 }}>
-          <div className="day-title"><b>{activeDay}</b><span>{activeDayData.workout || "Rest / no workout"}</span></div>
+          <div className="day-title"><b>{activeDay}</b><span>{activeDayData.workout || "Rest / no workout"} · {activeDayMeals.length} meal{activeDayMeals.length === 1 ? "" : "s"}</span></div>
           <label>Workout title<input value={activeDayData.workout || ""} onChange={e => updateProgram(activeDay, "workout", e.target.value)} placeholder="e.g. Upper body strength" /></label>
           <div className="program-field-group exercise-group">
             <div className="field-group-head"><span><Dumbbell size={14} /> Exercise</span>
@@ -1419,13 +1968,71 @@ function Admin({ customers, setCustomers, program, setProgram, notify }) {
         </motion.div>
       </AnimatePresence>}
 
-      <div className="program-save-bar"><button className="primary-btn" onClick={saveProgram} disabled={programSaving || programLoading || !selectedCustomer}><Save size={17} /> {programSaving ? "Saving…" : "Save program for this customer"}</button></div>
+      <div className="program-save-bar">
+        <div className="plan-copy-action">
+          <button type="button" className="outline-dark plan-copy-toggle" onClick={() => setCopyPickerOpen(true)} disabled={!selectedCustomer || programLoading} aria-haspopup="dialog">
+            <Copy size={16} /> Copy plan to day
+          </button>
+          <AnimatePresence>
+            {copyPickerOpen && <motion.div
+              className="plan-copy-popup-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: .18 }}
+              onClick={() => setCopyPickerOpen(false)}
+            >
+              <motion.div
+                className="plan-copy-popup"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="plan-copy-popup-title"
+                initial={{ opacity: 0, y: 16, scale: .96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 9, scale: .98 }}
+                transition={{ duration: .22, ease: "easeOut" }}
+                onClick={event => event.stopPropagation()}
+              >
+                <div className="plan-copy-popup-heading">
+                  <div><span className="section-label">COPY FULL PLAN</span><h3 id="plan-copy-popup-title">Choose a day</h3><p>Copy {activeDay}'s meals and program to another day.</p></div>
+                  <button type="button" className="plan-copy-popup-close" onClick={() => setCopyPickerOpen(false)} aria-label="Close day picker">×</button>
+                </div>
+                <div className="plan-copy-day-cards">
+                  {days.filter(day => day !== activeDay).map((day, index) => <motion.button
+                    type="button"
+                    className="plan-copy-day-card"
+                    key={day}
+                    onClick={() => copyActiveDayTo(day)}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: .16, delay: index * .025 }}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: .98 }}
+                  >
+                    <Copy size={15} /><b>{day}</b><small>Copy from {activeDay}</small>
+                  </motion.button>)}
+                </div>
+              </motion.div>
+            </motion.div>}
+          </AnimatePresence>
+        </div>
+        <button className="primary-btn" onClick={saveProgram} disabled={programSaving || programLoading || !selectedCustomer}><Send size={17} /> {programSaving ? "Publishing…" : "Publish full plan to client"}</button>
+      </div>
     </div>}
 
     <div className="admin-bottom-nav">
-      <button type="button" className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}><Users size={18} /><span>Customers</span></button>
-      <button type="button" className={tab === "program" ? "active" : ""} onClick={() => setTab("program")}><Utensils size={18} /><span>Meals</span></button>
+      <button type="button" className={tab === "customers" ? "active" : ""} aria-current={tab === "customers" ? "page" : undefined} onClick={() => setTab("customers")}><Users size={18} /><span>Customers</span></button>
+      <button type="button" className={tab !== "customers" ? "active" : ""} aria-current={tab !== "customers" ? "page" : undefined} onClick={() => setTab("plan")}><Dumbbell size={18} /><span>Meals &amp; program</span></button>
+      <button type="button" className="nav-logout" onClick={requestLogout}><LogOut size={18} /><span>Logout</span></button>
     </div>
+    <AnimatePresence>
+      {deleteTarget && <SwipeDeleteDialog
+        target={deleteTarget}
+        pending={deletePending}
+        onCancel={() => { if (!deletePending) setDeleteTarget(null); }}
+        onConfirm={deleteCustomer}
+      />}
+    </AnimatePresence>
   </div></motion.main>
 }
 function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
@@ -1729,7 +2336,110 @@ function ResetPasswordPage({ code, notify, go }) {
   </motion.main>;
 }
 function Reveal({ children, delay = 0 }) { return <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .15 }} transition={{ duration: .6, delay }}>{children}</motion.div> }
-function Toast({ message }) { return <motion.div className="toast" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}><Check size={17} />{message}</motion.div> }
+
+function LogoutConfirmDialog({ onCancel, onConfirm, pending }) {
+  useEffect(() => {
+    const handleKeyDown = event => {
+      if (event.key === "Escape" && !pending) onCancel();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel, pending]);
+
+  return <motion.div
+    className="logout-confirm-overlay"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    onMouseDown={event => {
+      if (event.target === event.currentTarget && !pending) onCancel();
+    }}
+  >
+    <motion.section
+      className="logout-confirm-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="logout-confirm-title"
+      aria-describedby="logout-confirm-description"
+      initial={{ opacity: 0, y: 22, scale: .94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 14, scale: .96 }}
+      transition={{ type: "spring", stiffness: 340, damping: 27 }}
+    >
+      <div className="logout-confirm-icon"><LogOut size={23} /></div>
+      <h2 id="logout-confirm-title">Log out?</h2>
+      <p id="logout-confirm-description">You’ll be signed out of your coaching account. Sign in again to view your plan and progress.</p>
+      <div className="logout-confirm-actions">
+        <motion.button type="button" className="logout-cancel-btn" onClick={onCancel} disabled={pending} whileTap={{ scale: .97 }}>Stay signed in</motion.button>
+        <motion.button type="button" className="logout-confirm-btn" onClick={onConfirm} disabled={pending} whileTap={{ scale: .97 }} whileHover={{ y: -1 }}>
+          {pending ? <><span className="logout-spinner" /> Logging out…</> : <><LogOut size={16} /> Log out</>}
+        </motion.button>
+      </div>
+    </motion.section>
+  </motion.div>;
+}
+
+function SwipeDeleteDialog({ target, pending, onCancel, onConfirm }) {
+  const swipeTrackRef = useRef(null);
+  const swipeToConfirm = (_, info) => {
+    const availableDistance = Math.max(0, (swipeTrackRef.current?.clientWidth || 0) - 58);
+    if (availableDistance > 0 && info.offset.x >= availableDistance * .78) onConfirm();
+  };
+  const handleKeyDown = event => {
+    if ((event.key === "Enter" || event.key === " ") && !pending) {
+      event.preventDefault();
+      onConfirm();
+    }
+    if (event.key === "Escape" && !pending) onCancel();
+  };
+
+  return <motion.div
+    className="delete-confirm-overlay"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    onMouseDown={event => {
+      if (event.target === event.currentTarget && !pending) onCancel();
+    }}
+  >
+    <motion.section
+      className="delete-confirm-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="delete-confirm-title"
+      aria-describedby="delete-confirm-description"
+      initial={{ opacity: 0, y: 22, scale: .94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 14, scale: .96 }}
+      transition={{ type: "spring", stiffness: 340, damping: 27 }}
+    >
+      <div className="delete-confirm-icon"><Trash2 size={22} /></div>
+      <h2 id="delete-confirm-title">Delete client?</h2>
+      <p id="delete-confirm-description">This permanently removes <b>{target.name || target.email || "this client"}</b>, their weekly program, notifications, and completion data. Their Firebase sign-in account is not deleted.</p>
+      <div className="delete-swipe-track" ref={swipeTrackRef} aria-label="Swipe right to confirm deletion">
+        <span>Swipe to delete</span>
+        <motion.button
+          type="button"
+          className="delete-swipe-handle"
+          drag={pending ? false : "x"}
+          dragConstraints={swipeTrackRef}
+          dragElastic={0}
+          dragMomentum={false}
+          dragSnapToOrigin
+          onDragEnd={swipeToConfirm}
+          onKeyDown={handleKeyDown}
+          disabled={pending}
+          aria-label="Swipe right to permanently delete this client"
+        >
+          {pending ? <span className="logout-spinner" /> : <ArrowRight size={19} />}
+        </motion.button>
+      </div>
+      <button type="button" className="delete-cancel-btn" onClick={onCancel} disabled={pending}>Cancel</button>
+    </motion.section>
+  </motion.div>;
+}
+
+function Toast({ message, type = "success" }) { const Icon = type === "error" ? AlertTriangle : Check; return <motion.div className={`toast${type === "error" ? " toast-error" : ""}`} role={type === "error" ? "alert" : "status"} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}><Icon size={17} />{message}</motion.div> }
 function Footer() { return <footer>
   <div className="container footer-inner">
     <div className="brand">
