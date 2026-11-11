@@ -638,10 +638,8 @@ function App() {
 }
 
 function Nav({ page, go, isCustomer, isAdmin, requestLogout, adminTab, setAdminTab }) {
-  const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("top");
   const navRef = useRef(null);
-  const close = () => setOpen(false);
 
   useEffect(() => {
     if (page !== "home") {
@@ -665,18 +663,7 @@ function Nav({ page, go, isCustomer, isAdmin, requestLogout, adminTab, setAdminT
     };
   }, [page]);
 
-  // Close the mobile navigation when the user clicks/taps anywhere outside it.
-  useEffect(() => {
-    if (!open) return;
-    const handleOutside = (event) => {
-      if (navRef.current && !navRef.current.contains(event.target)) close();
-    };
-    document.addEventListener("pointerdown", handleOutside);
-    return () => document.removeEventListener("pointerdown", handleOutside);
-  }, [open]);
-
   const section = (id) => {
-    close();
     setActiveSection(id);
     if (page !== "home") {
       go("home");
@@ -686,38 +673,14 @@ function Nav({ page, go, isCustomer, isAdmin, requestLogout, adminTab, setAdminT
     }
   };
   const navClass = `nav${page === "home" && !isCustomer && !isAdmin ? " nav-home" : ""}${page === "login" ? " nav-login" : ""}${isCustomer || isAdmin ? " nav-workspace" : ""}`;
-  const sectionLink = (id, label) => (
-    <button
-      className={activeSection === id ? "active" : ""}
-      aria-current={activeSection === id ? "location" : undefined}
-      onClick={() => section(id)}
-    >
-      {label}
-    </button>
-  );
   return <header className={navClass} ref={navRef}><div className="nav-inner">
-    <button className="brand" onClick={() => { close(); go("home") }}>
-      <span>COACH<span className="accent">RAFALIA</span></span>
+    <button className="brand brand-coach hero-brand" onClick={() => go("home")}>
+      <span className="brand-badge hero-brand-mark"><Dumbbell size={17} /></span>
+      <span className="brand-copy hero-brand-copy">
+        <small>Coach</small>
+        <strong>Zakaria</strong>
+      </span>
     </button>
-    <button className="mobile-menu" aria-label="Toggle menu" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
-    <nav className={open ? "nav-links open" : "nav-links"} aria-label="Main navigation">
-      {!isCustomer && !isAdmin && <>
-        {sectionLink("top", "Home")}
-        {sectionLink("how-it-works", "How it works")}
-        {sectionLink("about", "About")}
-        {sectionLink("packs", "Packs")}
-        {sectionLink("reviews", "Reviews")}
-      </>}
-      {isCustomer && <>
-        <button className={page === "dashboard" ? "active" : ""} aria-current={page === "dashboard" ? "page" : undefined} onClick={() => { close(); go("dashboard") }}>Dashboard</button>
-        <button className={page === "profile" ? "active" : ""} aria-current={page === "profile" ? "page" : undefined} onClick={() => { close(); go("profile") }}>My profile</button>
-      </>}
-      {isAdmin && <>
-        <button className={page === "admin" && adminTab === "customers" ? "active" : ""} aria-current={page === "admin" && adminTab === "customers" ? "page" : undefined} onClick={() => { close(); setAdminTab("customers"); go("admin") }}>Customers</button>
-        <button className={page === "admin" && adminTab !== "customers" ? "active" : ""} aria-current={page === "admin" && adminTab !== "customers" ? "page" : undefined} onClick={() => { close(); setAdminTab("plan"); go("admin") }}>Meals &amp; program</button>
-      </>}
-      {isCustomer || isAdmin ? <button className="outline-btn" onClick={() => { close(); requestLogout() }}><LogOut size={15} /> Logout</button> : <button className="primary-btn small" onClick={() => { close(); go("login") }}><LogIn size={15} /> Login</button>}
-    </nav>
   </div></header>;
 }
 
@@ -1073,7 +1036,7 @@ function CoachLoadingIndicator({ title, detail }) {
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: .45, ease: "easeOut" }}
   >
-    <div className="account-loading-brand"><span className="brand-mark"><Dumbbell size={17} /></span><span>COACH<span className="accent">RAFALIA</span></span></div>
+    <div className="account-loading-brand"><span className="brand-mark"><Dumbbell size={17} /></span><span>COACH <span className="accent">ZAKARIA</span></span></div>
     <motion.section className="account-loading-coach" initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .08, duration: .5 }}>
       <motion.img src={CoachAvatar} alt="Coach Zakaria Rafalia" initial={{ scale: .92 }} animate={{ scale: 1 }} transition={{ delay: .15, duration: .55, ease: "easeOut" }} />
       <span className="account-loading-eyebrow">YOUR COACH</span>
@@ -2058,9 +2021,6 @@ function Auth({ mode, onSubmit, onGoogle, onReset, switchMode }) {
   }, [packageOpen, genderOpen]);
 
   return <motion.main className="auth-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><div className="auth-box">
-    <div className="brand static">
-      <span>COACH<span className="accent">WOLF</span></span>
-    </div>
     <div className="section-label">{mode === "login" ? "WELCOME BACK" : "START YOUR JOURNEY"}</div>
     <h1>{mode === "login" ? "Sign in to your" : "Create your"} <span>account.</span></h1>
     <p>{mode === "login" ? "Access your personalized coaching dashboard." : "Tell us a little about yourself to get started."}</p>
@@ -2152,11 +2112,6 @@ function ForgotPasswordPage({ initialEmail, onReset, notify, go }) {
       <div className="reset-glow reset-glow-two" />
 
       <div className="reset-card">
-        <div className="reset-brand">
-          <div className="reset-brand-mark"><ShieldCheck size={22} /></div>
-          <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
-        </div>
-
         <form className="reset-form" onSubmit={submit}>
           <div className="section-label">ACCOUNT SECURITY</div>
           <h1>Forgot your <span>password?</span></h1>
@@ -2263,11 +2218,6 @@ function ResetPasswordPage({ code, notify, go }) {
       <div className="reset-glow reset-glow-two" />
 
       <div className="reset-card">
-        <div className="reset-brand">
-          <div className="reset-brand-mark"><ShieldCheck size={22} /></div>
-          <div className="brand static"><span>COACH<span className="accent">WOLF</span></span></div>
-        </div>
-
         {!resolvedCode && !loading ? <form className="reset-form" onSubmit={submitManualCode}>
           <div className="section-label">ACCOUNT SECURITY</div>
           <h1>Enter your reset <span>code.</span></h1>
