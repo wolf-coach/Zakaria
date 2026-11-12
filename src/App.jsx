@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence,
   useScroll,
+  useInView,
   useSpring,
   useTransform,
   useMotionValue,
@@ -835,15 +836,34 @@ function BeforeAfterSlider({ position, setPosition }) {
   </div>;
 }
 
+function HeroStat({ label, value, suffix = "", detail, icon: Icon, supportDays }) {
+  const statRef = useRef(null);
+  const isInView = useInView(statRef, { once: true, amount: .5 });
+  const displayedValue = isInView ? value : 0;
+
+  return (
+    <div
+      ref={statRef}
+      className="hero-stat"
+    >
+      <span className="hero-stat-icon"><Icon size={15} /></span>
+      <small>{label}</small>
+      <strong>
+        <NumberFlow value={displayedValue} suffix={suffix} transformTiming={{ duration: 2000, easing: "ease-out" }} />
+        {label === "Coach support" && <>/<NumberFlow value={isInView ? supportDays : 0} transformTiming={{ duration: 2000, easing: "ease-out" }} /></>}
+      </strong>
+      <span className="hero-stat-detail">{detail}</span>
+    </div>
+  );
+}
+
 function Home({ go }) {
   const [comparisonPosition, setComparisonPosition] = useState(20);
-  const beforeShare = comparisonPosition / 100;
-  const afterShare = 1 - beforeShare;
-  const weight = Math.round(100 * beforeShare + 80 * afterShare);
-  const planWeeks = Math.round(100 * beforeShare + 12 * afterShare);
-  const supportHours = Math.round(24 * afterShare);
-  const supportDays = Math.round(7 * afterShare);
-  const satisfiedClients = Math.round(50 * afterShare);
+  const weight = 80;
+  const planWeeks = 12;
+  const supportHours = 24;
+  const supportDays = 7;
+  const satisfiedClients = 50;
   const packs = [
     { name: "Basic", price: "1000MAD", desc: "1 To 1 At Gym Metroflex.", items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
     { name: "Transformation", price: "1200MAD", desc: "1 To 1 In Your Home Or Your Gym", popular: true, items: ["Fully Personalized Workout Session", "One-on-one coaching during the entire workout","Training tips to improve future workouts","Motivation and accountability to push your limits","Nutrition basics","An account with your own dashboard for your daily meals.","Everything in Starter", "Personal meal plan", "Weekly check-in", "Progress tracking","Everything in Transformation", "Direct coach support", "Program adjustments", "Priority check-ins"] },
@@ -898,25 +918,8 @@ function Home({ go }) {
                 { label: "Plan length", value: planWeeks, suffix: "", detail: "weeks", icon: CalendarDays },
                 { label: "Coach support", value: supportHours, suffix: "", detail: "support", icon: HeartPulse },
                 { label: "Satisfied clients", value: satisfiedClients, suffix: satisfiedClients > 0 ? "+" : "", detail: "clients", icon: Users }
-              ].map(({ label, value, suffix = "", detail, icon: Icon }, index) => (
-                <motion.div
-                  className="hero-stat"
-                  key={label}
-                  initial={{ opacity: 0, y: 12 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: .5 }}
-                  transition={{ duration: .45, delay: index * .1 }}
-                >
-                  <span className="hero-stat-icon"><Icon size={15} /></span>
-                  <small>{label}</small>
-                  <strong>
-                    {label === "Satisfied clients"
-                      ? <NumberFlow value={value} suffix={suffix} transformTiming={{ duration: 300, easing: "ease-out" }} />
-                      : <NumberFlow value={value} suffix={suffix} transformTiming={{ duration: 300, easing: "ease-out" }} />}
-                    {label === "Coach support" && <>/<NumberFlow value={supportDays} transformTiming={{ duration: 300, easing: "ease-out" }} /></>}
-                  </strong>
-                  <span className="hero-stat-detail">{detail}</span>
-                </motion.div>
+              ].map(stat => (
+                <HeroStat key={stat.label} {...stat} supportDays={supportDays} />
               ))}
             </div>
           </div>
