@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "coaching-wolf"
-  }
+  },
+  "targets": {
+    "coaching-wolf": {
+      "hosting": {
+        "coaching-wolf": [
+          "coaching-wolf"
+        ],
+        "zakariacoach": [
+          "zakariacoach"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
